@@ -38,12 +38,10 @@ portfolio.
 | R3 | Produce before/after comparison including match rates, standardization improvements, and coordinate coverage. | Reproducible summary metrics with explicit denominators, missing/failure handling, and before/after outputs. |
 | R4 | Append 3–5 relevant location enrichment attributes to validated records using Precisely APIs; explain why selected and what business decision they enable. | Attribute selection supported by verified product, field, and account-access documentation; enriched output and field provenance. |
 | R5 | Implement one functional, focused AI step using a free-tier LLM option or local model; depth over breadth. | A tested AI workflow on actual or clearly labelled fixture enrichment data, with structured output and evidence-grounding checks. |
-| R6 | Write a one-page VP of Operations business impact summary that communicates the business problem, quantifies two relevant risks in cost or revenue terms, explains how the proposed solution mitigates them, and explains the incremental value of AI beyond enrichment. | Executive-ready one-page PDF or clean Markdown; all financial inputs labelled as measured, sourced, or assumed. |
+| R6 | Write a one-page VP of Operations business impact summary that communicates the business problem, quantifies two relevant risks in cost or revenue terms, explains how the proposed solution mitigates them, and explains the incremental value of AI beyond enrichment. | `docs/BUSINESS_IMPACT.md` with all financial inputs labelled as measured, sourced, or assumed; optional PDF export. |
 | R7 | Everything runs locally on a laptop using free-tier services; no cloud infrastructure required. | Reproducible local setup and run instructions; no AWS, Azure, or GCP dependency. |
 | R8 | Precisely free trial is described as 2,500 credits valid for 30 days; plan use and do not exhaust credits during exploration. | Written budget gate, measured/verified credit assumptions before calls, and a conservative execution plan. |
 | R9 | Deliver a public GitHub repository containing runnable commented code or notebook, README with setup, `.env` key structure and sample outputs; before/after CSV or Excel with summary stats; and the one-page impact summary. | Repository contents and final checklist. The current repository is private; changing it to public is a publication/visibility change and must be explicitly approved before it is made. |
-| R10 | Communicate the outcome to a non-technical executive. | One-page business impact summary (docs/BUSINESS_IMPACT.*) as the executive deliverable. |
-| R11 | Evaluation weights: technical acumen 30%, business acumen 20%, enrichment instinct 15%, AI depth 20%, communication/storytelling 15%. | Evidence maps to each evaluation dimension through the working prototype, README, measured outputs, AI workflow, and mandatory business impact summary; see Section 17 and final checklist. |
 
 ### Explicit requirements versus scope boundaries
 
@@ -54,7 +52,6 @@ portfolio.
 - The assignment calls for a functional prototype. It does not require
   production deployment, enterprise-scale processing, automated underwriting
   decisions, a web UI, or a distributed system.
-- The one-page business impact summary is the mandatory executive deliverable.
 - A public repository is an explicit submission requirement. This repository
   is currently private. Do not change visibility or publish sample data/code
   without the owner's explicit approval.
@@ -72,12 +69,17 @@ These artifacts are to be submitted in a public GitHub repository, subject to
 the current private-repository visibility constraint and explicit approval
 before changing visibility or publishing.
 
-**Not required:** a separate presentation; the business impact summary is the executive deliverable.
-
 **Optional enhancements:** only those listed in Section 20; they do not
 replace or delay mandatory deliverables.
 
 ## 3. Functional and non-functional requirements
+
+### Target geography
+
+**Recommended decision:** United States addresses only. This focuses the
+prototype on standardized US hazard data and offers the best chance of
+meaningful API matches. Phase 0 must confirm that US products and selected
+attributes are enabled for the account before implementation or API use.
 
 ### Functional requirements
 
@@ -238,6 +240,7 @@ precisely_project/
 │   └── integration/               # opt-in; requires credentials and budget gate
 ├── docs/
 │   ├── PROJECT_PLAN.md
+│   ├── ARCHITECTURE.md
 │   └── BUSINESS_IMPACT.md
 └── .github/                       # optional later, only if existing CI is appropriate
 ```
@@ -400,7 +403,10 @@ confirmed.
    records/stages that need it where provider semantics permit.
 6. Limit enrichment calls to records eligible under documented rules and
    only to selected attributes/products. Confirm whether attributes are
-   separately charged.
+   separately charged. For the raw-versus-verified location comparison,
+   budget for roughly double enrichment calls on the comparison subset if
+   each location lookup is charged; confirm actual billing and workflow in
+   Phase 0, then size the subset.
 7. Gate execution on an operator-configured maximum and display a clear
    estimate/confirmation before calls. Stop on unexpected credit accounting
    or rate-limit/error patterns; do not blindly retry.
@@ -558,6 +564,12 @@ and attempted counts separately.
 - **Coordinate coverage:** records with valid returned coordinate pairs
   divided by total input and by geocoding attempts; identify partial or
   low-quality results only using documented metadata.
+- **Raw-versus-verified enrichment comparison:** for the same comparison
+  records, compare selected verified enrichment results using raw and
+  standardized/geocoded locations. Measure the share whose hazard category
+  changes when a verified hazard attribute is available. If no hazard
+  attribute is available, report post-verification geocode displacement as a
+  clearly labelled proxy, not a hazard measure.
 - **Persistent identifier coverage:** records with an actually returned
   PreciselyID divided by geocoding attempts, only if supported.
 - **Enrichment completeness:** non-missing values per selected attribute,
@@ -577,22 +589,30 @@ terms. No carrier cost, loss, premium, claim, or dirty-rate baselines are
 provided. Therefore, the prototype must not invent realized savings or claim
 causality.
 
-Build a one-page, transparent scenario model with inputs sourced from the
+Build the mandatory one-page `docs/BUSINESS_IMPACT.md` summary, with an
+optional PDF export. It must state the business problem, quantify the two
+risks below, explain how the proposed solution mitigates each, and explain the
+incremental value of AI beyond enrichment. Use inputs sourced from the
 assignment, measured prototype, or clearly labelled assumptions. Prefer
-carrier-provided operational figures if supplied later. For example:
+carrier-provided operational figures if supplied later.
 
-1. **Claims/service rework exposure:** annual affected records × estimated
-   address-driven misrouting share × documented or explicitly assumed cost
-   per reroute/rework. Explain how verified locations and service-area
-   matching could reduce avoidable work; do not claim elimination unless
-   measured.
-2. **Underwriting/pricing review exposure:** records requiring manual
-   location review × documented/assumed cost per review, or a separately
-   labelled premium-at-risk scenario based on carrier-approved assumptions.
-   Explain how standardized locations plus verified hazard/property context
-   enable review of location-dependent underwriting decisions. Do not state
-   that a specific address is mispriced without a trusted pricing/risk
-   reference.
+1. **Claims misrouting and rework cost:** annual claims × address-defect share
+   observed in the prototype × cost per misrouted claim. The cost per
+   misrouted claim is assumed, must be labelled, and must have its source
+   stated. Explain how verified locations can reduce misrouting/rework; do not
+   claim elimination or realized savings without measurement.
+2. **Risk-zone misassignment and revenue exposure:** policies × share whose
+   hazard category changes after verification × average premium differential.
+   Measure the category-change share by enriching raw versus verified
+   locations for the same comparison records. The average premium
+   differential is assumed, must be labelled, and must have its source
+   stated. Underpricing can create premium leakage/adverse selection;
+   overpricing can reduce competitiveness and retention. Do not claim actual
+   mispricing or revenue impact without carrier pricing data and validation.
+
+If no verified hazard attribute is available, use geocode displacement after
+verification as a clearly labelled proxy for location change; do not present
+it as a measured hazard-category change.
 
 Show formulas, source/value/type for each input, a conservative range or
 sensitivity table, and the difference between:
@@ -617,25 +637,52 @@ understood.
 | 0. Plan and access discovery | Approve this plan; inspect official Precisely docs/account, candidate enrichment products, trial credits, LLM terms, and repository visibility constraints. | Owner plan review; account access. | API verification checklist completed or blockers recorded; no speculative API calls; visibility approval remains separate. |
 | 1. Minimal foundation | Add project setup, canonical contracts, configuration, safe logging, and reproducible local command. | Phase 0; approved module scope. | Clean local setup; secrets excluded; offline tests run. |
 | 2. Synthetic data and baseline | Generate 200–500 seeded records, controls and documented noise; define metrics. | Phase 1. | All required defect categories present; dirty percentage/count documented; tests confirm generator and baseline. |
-| 3. Precisely address and geocoding | Implement verified API adapters, bounded safe handling, standardization, geocoding, and PreciselyID mapping only if documented/returned. | Verified API/docs/account; credit estimate and operator approval. | Small live smoke test passes within budget; output provenance/status correct; full 200-record run is credit-feasible or blocker disclosed. |
-| 4. Enrichment | Select and implement 3–5 verified attributes for eligible records. | Product access, semantics, terms, credits, and Phase 3 data. | Each field has documented definition/source; partial/missing data is represented honestly; eligible-row coverage reported. |
+| 3. Precisely address and geocoding | Implement verified API adapters, bounded safe handling, standardization, geocoding, and PreciselyID mapping only if documented/returned. | Verified US API/products/account access; credit estimate and owner approval. | Small live smoke test passes within budget; output provenance/status correct; full 200-record run is credit-feasible or blocker disclosed; comparison subset credit estimate includes raw-versus-verified enrichment where supported. |
+| 4. Enrichment | Select and implement 3–5 verified attributes for eligible records; compare raw versus verified location enrichment on a subset when the selected hazard attribute is available. | US product access, semantics, terms, credits, Phase 3 data, and comparison-subset size set after Phase 0. | Each field has documented definition/source; partial/missing data is represented honestly; eligible-row coverage and raw-versus-verified hazard-category changes (or labelled geocode-displacement proxy) are reported. |
 | 5. Focused AI workflow | Implement evidence-grounded narrative with selected free-tier/local option and safety tests. | Enrichment result shape; chosen provider/privacy review. | Tested output and abstention; factual claims tied to input fields; no unsupported decisions. |
-| 6. Reporting and impact | Produce before/after detail/summary and the mandatory one-page VP business impact summary. | Real run artifacts or clearly labelled fallback; metric definitions and transparent financial inputs. | Required metrics and outputs present; two cost/revenue risks quantified; solution mitigation and AI's incremental value explained; assumptions separated from measurements; concise customer narrative. |
-| 7. Final validation and submission | Re-run from clean setup; review artifacts/secrets; verify README and required outputs. | Phases 1–6. | README/run steps reproduce output; tests and integration results reported accurately; all mandatory artifacts included; public visibility only after explicit approval. |
+| 6. Reporting and impact | Produce before/after detail/summary and the mandatory `docs/BUSINESS_IMPACT.md` summary, with optional PDF export. | Real run artifacts or clearly labelled fallback; metric definitions and transparent financial inputs. | Required metrics and outputs present; two cost/revenue risks quantified; solution mitigation and AI's incremental value explained; assumptions separated from measurements; one-page summary is clear to a non-technical executive. |
+| 7. Final validation and submission | Re-run from clean setup; review artifacts/secrets; verify reviewer-facing documents and required outputs. | Phases 1–6. | README/run steps reproduce output; tests and integration results reported accurately; mandatory artifacts included; visibility approval remains separate. |
 
-### Evaluation alignment
+**Phase 7 submission hygiene:** internal planning documents, including this
+file, are not submitted. Reviewer-facing documents are `README.md`,
+`docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The public repository
+must present a clean history; decide the approach in Phase 7, without
+rewriting history or publishing before explicit approval.
 
-- **Technical acumen (30%):** clean modular code, reproducible run, tested
+### Quality objectives
+
+- **Technical quality:** clean modular code, reproducible run, tested
   provider integration, and honest error/coverage handling.
-- **Business acumen (20%):** cost/revenue risk scenarios with transparent
+- **Business value:** cost/revenue risk scenarios with transparent
   assumptions and actionable VP summary.
-- **Enrichment instinct (15%):** verified location context with a clear
+- **Enrichment relevance:** verified location context with a clear
   underwriting/service decision and access-dependent rationale.
-- **AI depth (20%):** functioning, grounded workflow, evidence checks,
+- **AI quality:** functioning, grounded workflow, evidence checks,
   abstention, and limitations.
-- **Communication/storytelling (15%):** accessible before/after evidence,
-  README, and mandatory one-page business impact summary that makes the
-  problem and proposed business value clear to a non-technical executive.
+- **Communication:** accessible before/after evidence, README, and mandatory
+  one-page business impact summary that makes the problem and proposed
+  business value clear to a non-technical executive.
+
+### Schedule
+
+Deadline: Nov 6. Target submission: Nov 4. Nov 5 is reserved as a buffer.
+
+| Date | Planned work |
+|---|---|
+| Oct 27–28 | Phase 0 and plan cleanup. Phase 0 account/portal access and verification are performed by the owner. |
+| Oct 28 | Phase 1: minimal foundation, after the Phase 0 access gate clears. |
+| Oct 29 | Phase 2: synthetic data and baseline. |
+| Oct 30 | Phase 3: smoke test, only after the owner approves the credit estimate. |
+| Oct 31 | Phase 3: full run, within the approved credit budget. |
+| Nov 1 | Phase 4: enrichment and raw-versus-verified comparison. |
+| Nov 2 | Phase 5: focused AI workflow. |
+| Nov 3 | Phase 6: reporting and business impact summary. |
+| Nov 4 | Phase 7: final validation and target submission. |
+| Nov 5 | Schedule buffer. |
+| Nov 6 | Deadline. |
+
+If Phase 0 slips, later dates slip accordingly; do not bypass access or credit
+verification to preserve the target dates.
 
 ## 18. Risks, mitigations, and unresolved questions
 
@@ -693,10 +740,15 @@ understood.
 - [ ] Mandatory one-page VP impact summary communicates the business problem,
   quantifies two cost/revenue risks, explains how the solution mitigates them,
   and states AI's incremental value beyond enrichment; measurements and
-  assumptions are clearly distinguished.
-- [ ] The business impact summary is the executive deliverable; no separate presentation is planned.
+  assumptions are clearly distinguished; deliver as `docs/BUSINESS_IMPACT.md`
+  with optional PDF export.
 - [ ] Setup and offline tests run from documented instructions; actual test
   and live integration results are accurately reported.
+- [ ] Submission hygiene: internal planning documents, including
+  `docs/PROJECT_PLAN.md`, are not submitted. Reviewer-facing documents are
+  `README.md`, `docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The
+  public repository must present a clean history; decide the approach in
+  Phase 7 without rewriting history or publishing before approval.
 - [ ] No commit, push, publication, branch deletion, or history change occurs
   without explicit approval.
 
