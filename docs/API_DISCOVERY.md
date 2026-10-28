@@ -4,8 +4,8 @@ Purpose: record verified Precisely trial, API, US coverage, enrichment, and
 LLM details before implementation or API calls. Fill this worksheet from
 official documentation and the trial account.
 
-**Status:** NOT STARTED  
-**Date checked:** TBD
+**Status:** IN PROGRESS – pricing and docs verified; smoke test pending
+**Date checked:** 2026-10-28
 
 Every filled value must include a source link or the note
 `observed in account on <date>`. Do not infer undocumented behavior.
@@ -14,88 +14,131 @@ Every filled value must include a source link or the note
 
 | Item | Value | Source / observation |
 |---|---|---|
+| Platform | Precisely APIs (`developer.precisely.com`, `api.precisely.com`) | Account, observed 2026-10-28 |
 | Trial start date | TBD | TBD |
-| Trial expiry date | TBD | TBD |
-| Credit balance at start | TBD | TBD |
-| Where the balance is visible | TBD | TBD |
+| Trial expiry date | TBD-owner to record | TBD |
+| Credit balance at start | 2,500 credits; approximately 30-day trial | Account, observed 2026-10-28 |
+| Credit value | 1 credit = $0.01 | Account, observed 2026-10-28 |
+| Credit charging rule | Credits charged only when a call has no errors and returns results | Account, observed 2026-10-28 |
+| Where the balance is visible | Portal Credit Usage dashboard; per-API calls, errors, and usage | Account, observed 2026-10-28 |
 | Permitted test-data rules | TBD | TBD |
-| US coverage confirmed (Y/N/TBD) | TBD | TBD |
+| US coverage confirmed (Y/N/TBD) | TBD; account product/attribute access confirmation pending | TBD |
+| Production licensing note | Pricing page footnote: applications making determinations of risk may carry additional fees; commercial licensing note for production, not a trial blocker | Account, observed 2026-10-28 |
 
 ## 2. Authentication
 
 | Item | Value | Source |
 |---|---|---|
-| Method | TBD | TBD |
-| Credential type | TBD | TBD |
-| Token lifetime | TBD | TBD |
-| Base URL | TBD | TBD |
+| Method | OAuth2 `client_credentials` (GettingStarted/generating_an_oauth_token.html) | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| Token request | POST `https://api.precisely.com/oauth/token`; header `Authorization: Basic base64(API_KEY:SECRET)`, `Content-Type: application/x-www-form-urlencoded`; body `grant_type=client_credentials` (GettingStarted/generating_an_oauth_token.html) | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| Credential type / location | API key and secret from portal “API Keys” (GettingStarted/generating_an_oauth_token.html) | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| Token lifetime | `expiresIn` approximately 35,999 seconds (GettingStarted/generating_an_oauth_token.html) | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| Base URL | `https://api.precisely.com` | Account, observed 2026-10-28 |
 
-Secrets never go in this file. Record documentation links and credential
-metadata only; do not record credentials, tokens, or other secret values.
+Encode `API_KEY:SECRET` locally in code; never use an online encoder. Secrets
+belong only in `.env`, never in this file.
 
 ## 3. Operations and documentation
 
-| Operation | Official doc link | Endpoint (as documented) | Enabled on my account? (Y/N/TBD) | Credits per call (as documented) | Batch supported? | Key response fields | US coverage | Notes |
-|---|---|---|---|---|---|---|---|---|
-| Address verification/standardization | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Geocoding | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| PreciselyID retrieval | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Candidate enrichment attribute 1 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Candidate enrichment attribute 2 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Candidate enrichment attribute 3 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Candidate enrichment attribute 4 (if needed) | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Candidate enrichment attribute 5 (if needed) | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| Operation | Official doc link | Endpoint (as documented) | Enabled on my account? (Y/N/TBD) | Credits per call (as documented) | Batch supported? | Key response fields | US coverage | Notes | Source |
+|---|---|---|---|---|---|---|---|---|---|
+| Address verification/standardization: ValidateMailingAddress / Pro / Premium | TBD | TBD | TBD | 1 credit per US address for each; 0.33 per USCAN address for each | TBD | Premium adds parsed elements, per-element match codes, lat/long | US pricing listed; account access TBD | Address Verification evaluated once in smoke test only | Account, observed 2026-10-28 |
+| Geocoding forward: Premium | Docs mapping appendix | `/geocode/v1/premium/geocode` | TBD | Premium: 1 credit; Advanced: 0.5; Basic: 0.1. POST is per address. | TBD | `candidates[].precisionCode`; `candidates[].precisionLevel`; suffix `HPNTSCZA` | TBD | GET; Advanced endpoint TBD | Account, observed 2026-10-28 |
+| Geocoding forward: Advanced / Basic | TBD | Advanced: TBD; Basic: TBD | TBD | Advanced: 0.5 credit; Basic: 0.1 credit. POST is per address. | TBD | `candidates[].precisionCode`; `candidates[].precisionLevel`; suffix `HPNTSCZA` | TBD | GET | Account, observed 2026-10-28 |
+| PreciselyID by address | Geocode/PreciselyID/byPreciselyID/resp_desc.html | `/geocode/v1/key/byaddress` | TBD | 0.01 credit | TBD | `key`, `matchedAddress` | TBD |  | Account, observed 2026-10-28 |
+| Key lookup | TBD | TBD | TBD | 0.01 credit | TBD | TBD | TBD |  | Account, observed 2026-10-28 |
+| Flood by location: flood zone code, flood risk level, base flood elevation | TBD | `/risks/v1/flood/bylocation?latitude&longitude&includeZoneDesc&includeGeometry` | TBD | 5 credits per call | TBD | `floodZone.code`, `floodZone.areaType`, `floodZone.riskLevel`, `floodZone.primaryZone.code/description`, `floodZone.baseFloodElevation.unit/value`, `floodZone.additionalInfo`, `community.number`, `community.status.code/description` | US only | One flood call supplies the listed candidate attributes | Account, observed 2026-10-28 |
+| Distance to flood hazard by location | TBD | TBD | TBD | 2 credits per call | TBD | TBD | US only |  | Account, observed 2026-10-28 |
+| Property attributes by address: one named attribute | TBD | `/property/v1/all/attributes/byaddress` | TBD | 1 credit per attribute + 0.01 credit for PBKey | TBD | TBD | TBD | Request named attributes only; verify charging on 1 record before any batch | Account, observed 2026-10-28 |
+| Fire station | TBD | TBD | TBD | 6 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
+| Fire risk | TBD | TBD | TBD | 9 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
+| Crime | TBD | TBD | TBD | 2 credits per call | TBD | TBD | TBD | Recorded; excluded on fairness | Account, observed 2026-10-28 |
+| Earthquake | TBD | TBD | TBD | 2 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
 
 ### Geocoder behavior on defective input
 
 | Question | Finding | Source |
 |---|---|---|
 | Does geocoding auto-correct or standardize raw input? | TBD | TBD |
-| What precision/match levels are returned? Record the names exactly as documented. | TBD | TBD |
-| How is unresolved input reported? | TBD | TBD |
+| `candidates[].precisionCode` categories (LI_Geo_responsedesc.html) | S8 house point; S7 interpolated between points; S5 street address; S4 street centroid; SC projected house-level; SX intersection; S0 no coordinates; Z1/Z2/Z3 postal centroid; G1–G4 area centroid; B1/B2 PO box | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| `candidates[].precisionLevel` (LI_Geo_responsedesc.html) | 0–18; 16 = address point; 3 = postal code centroid; 0 = no coordinates | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| Match modes (LI_GGM_Geo_Matching.html) | Exact, Standard (default), Relaxed, Custom; USA also Interactive and CASS | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| `HPNTSCZA` suffix (LI_Geo_responsedesc.html) | Shows which components matched | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| How is unresolved input reported? (LI_Geo_responsedesc.html) | S0 / `precisionLevel` 0 or no candidates | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
+| DPV fields (LI_Geo_responsedesc.html) | Restricted to CASS Certified products; do not rely on them | Docs base: https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/ |
 
 This determines how the raw-vs-verified comparison (PROJECT_PLAN.md Sections
 15–16, Risk 2) is defined.
 
-## 4. Credit budget calculator
+## Phase 0 decisions
 
-Enter documented/account-observed inputs only. Use the same unit (credits)
-throughout. For selected enrichment, `C_E` is the sum of credits for one
-enrichment pass per record; the comparison subset adds a raw-location pass
-alongside the normal verified-location pass. If billing differs, revise the
-formula to match documented billing before any call.
+- **Owner-approved 2026-10-28** — United States addresses only; `N = 200`
+  records.
+- **Owner-approved 2026-10-28** — Geocode Premium is the verification/
+  standardization and geocoding step for the full run. Address Verification
+  is evaluated once in the smoke test only.
+- **Owner-approved 2026-10-28** — Enrichment eligibility is precisionCode
+  S5, S7, or S8 only.
+- **Owner-approved 2026-10-28** — Selected enrichment: flood zone code,
+  flood risk level, and base flood elevation from one flood call; distance to
+  flood hazard; and one property attribute (TBD after smoke test).
+- **Owner-approved 2026-10-28** — Risk APIs are called by location using
+  pipeline coordinates.
+- **Owner-approved 2026-10-28** — Fire station and fire risk excluded on
+  cost/relevance grounds; crime and demographics excluded on fairness grounds.
+- **Owner-approved 2026-10-28** — Risk 2 comparison subset is approximately
+  40 records. Exact counterfactual method is TBD after smoke test. Budget
+  comparison calls at 6 credits per record.
+
+## Smoke test plan
+
+Maximum: 5 records. Owner approval is required before any call.
+
+- Compare Premium, Advanced, and Basic `precisionCode` results.
+- Compare Address Verification Premium and USCAN output.
+- Request ONE named property attribute on ONE record, then check the Credit
+  Usage dashboard before continuing.
+- Test flood and distance-to-flood-hazard by location.
+
+## 5. Credit budget calculator
+
+Approved budget inputs are below. Use the same unit (credits) throughout.
+For selected enrichment, `C_E` is one full enrichment pass per eligible
+record. The comparison subset adds a raw-location flood pass in addition to
+the normal verified-location pass; the comparison term is
+`S × (C_G + C_E_flood)`.
 
 | Symbol | Input | Value |
 |---|---|---|
-| `B` | Starting available credit balance | |
-| `C_AV` | Credits per record for address verification/standardization | |
-| `C_G` | Credits per record for geocoding | |
-| `C_PID` | Additional credits per record for PreciselyID retrieval, if separately charged | |
-| `C_E` | Credits per record for one selected enrichment pass | |
-| `S` | Raw-vs-verified enrichment comparison subset size | |
-| `C_SMOKE` | Smoke-test allowance in credits | |
-| `C_RERUN` | Re-run allowance in credits | |
-| `C_RESERVE` | Reserve: `0.20 × B` | |
-| `C_AVAILABLE` | Spendable balance: `B − C_RESERVE` | |
+| `B` | Starting available credit balance | 2,500 |
+| `C_AV` | Credits per record for Address Verification in full run | 0 |
+| `C_G` | Credits per record for Geocode Premium | 1 |
+| `C_PID` | Credits per record for PreciselyID retrieval | 0.01 |
+| `C_E` | Credits per eligible record for selected enrichment: flood 5 + distance 2 + one property attribute 1 + PBKey 0.01 | 8.01 |
+| `C_E_flood` | Credits for flood call in raw-vs-verified comparison | 5 |
+| `S` | Raw-vs-verified enrichment comparison subset size | 40 |
+| `C_SMOKE` | Smoke-test allowance in credits | 100 |
+| `C_RERUN` | Re-run allowance in credits | 0 (cached; failed calls free) |
+| `C_RESERVE` | Reserve: `0.20 × B` | 500 |
+| `C_AVAILABLE` | Spendable balance: `B − C_RESERVE` | 2,000 |
 
 **Estimated total formula**
 
-`N × (C_AV + C_G + C_PID + C_E) + S × C_E + C_SMOKE + C_RERUN`
+For eligibility rate `E`:
 
-Proceed only if the estimated total is no greater than `C_AVAILABLE` and the
-owner has approved the estimate.
+`N × (C_AV + C_G + C_PID) + (N × E × C_E) + S × (C_G + C_E_flood) + C_SMOKE + C_RERUN`
 
-| Planned records (`N`) | Estimated total | Spendable balance | Within budget? |
-|---|---|---|---|
-| 200 | `200 × (C_AV + C_G + C_PID + C_E) + S × C_E + C_SMOKE + C_RERUN` | `B − C_RESERVE` | TBD |
-| 300 | `300 × (C_AV + C_G + C_PID + C_E) + S × C_E + C_SMOKE + C_RERUN` | `B − C_RESERVE` | TBD |
+| Case | Calculation | Total | Spendable balance | Remaining balance | Resulting reserve (% of `B`) | Within spendable balance? |
+|---|---|---:|---:|---:|---:|---|
+| Best case: 200 records, 85% eligible (`E = 0.85`) | `200 × (0 + 1 + 0.01) + (200 × 0.85 × 8.01) + 40 × (1 + 5) + 100 + 0` | 1,903.70 | 2,000 | 596.30 | 23.85% | Yes; 96.30 credits below spendable limit |
+| Worst case: 200 records, 100% eligible (`E = 1.00`) | `200 × (0 + 1 + 0.01) + (200 × 1.00 × 8.01) + 40 × (1 + 5) + 100 + 0` | 2,144.00 | 2,000 | 356.00 | 14.24% | No; exceeds spendable limit by 144.00 credits |
 
-Confirm whether PreciselyID retrieval is a separate billed operation and
-whether enrichment billing is per request, record, attribute, or another
-documented unit. If unsupported or included in another operation, record the
-documented treatment rather than assuming a zero cost.
+The reserve percentage is remaining balance divided by starting balance.
+The worst case falls below the approved 20% reserve and is not within budget;
+reduce full-run eligible enrichment volume or comparison-subset size only
+after owner review, and do not proceed above the spendable limit.
 
-## 5. Enrichment candidate scoring
+## 6. Enrichment candidate scoring
 
 Record only verified attributes and documented definitions. Use candidate
 themes from `PROJECT_PLAN.md` as a starting point; do not treat them as
@@ -103,13 +146,13 @@ available products or fields until confirmed.
 
 | Attribute | Business decision it supports | Supports Risk 1 or Risk 2? | Available? | Definition/units | Fairness concern (Y/N) | Selected? |
 |---|---|---|---|---|---|---|
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| Flood zone code | Compare hazard category at raw versus verified location for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
+| Flood risk level | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
+| Base flood elevation | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
+| Distance to flood hazard | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
+| One property attribute | TBD | TBD | TBD | TBD | TBD | TBD after smoke test |
 
-## 6. LLM option check
+## 7. LLM option check
 
 | Option | Free-tier access | Data-retention terms link | Laptop feasibility | Decision |
 |---|---|---|---|---|
@@ -118,7 +161,7 @@ available products or fields until confirmed.
 | Hugging Face | TBD | TBD | TBD | TBD |
 | Ollama | TBD | TBD | TBD | TBD |
 
-## 7. Open questions and blockers
+## 8. Open questions and blockers
 
 | Question or blocker | Owner / next action | Status | Source / notes |
 |---|---|---|---|
@@ -126,7 +169,7 @@ available products or fields until confirmed.
 | TBD | TBD | TBD | TBD |
 | TBD | TBD | TBD | TBD |
 
-## 8. Phase 0 exit criteria
+## 9. Phase 0 exit criteria
 
 - [ ] API verification checklist completed or blockers recorded.
 - [ ] No speculative API calls.
