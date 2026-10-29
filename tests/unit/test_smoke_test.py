@@ -29,6 +29,7 @@ def test_dry_run_prints_call_plan_and_makes_no_http_calls(tmp_path, monkeypatch,
     assert "preciselyid_by_address" in output
     assert "address_verification_us" in output
     assert "Planned credit estimate: 12.81" in output
+    assert "Account credits left: 2500" in output
 
 
 def test_stage_b_dry_run_estimates_one_credit(tmp_path, monkeypatch, capsys):

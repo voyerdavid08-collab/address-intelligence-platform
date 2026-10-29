@@ -51,6 +51,7 @@ def main() -> int:
         f"Credits spent: {ledger.cumulative_spent} / {ledger.hard_cap}; "
         f"remaining: {ledger.remaining}"
     )
+    print(f"Account credits left: {settings.trial_credits - ledger.cumulative_spent}")
     if not args.check_config and args.record_external_spend is None:
         return 0
     return 0

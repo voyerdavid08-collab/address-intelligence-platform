@@ -64,7 +64,12 @@ def _plan(stage: str) -> list[PlannedCall]:
     return calls
 
 
-def _print_plan(stage: str, plan: list[PlannedCall], ledger: CreditLedger) -> None:
+def _print_plan(
+    stage: str,
+    plan: list[PlannedCall],
+    ledger: CreditLedger,
+    trial_credits: Decimal,
+) -> None:
     print(f"Stage {stage} planned calls:")
     for call in plan:
         print(
@@ -77,6 +82,7 @@ def _print_plan(stage: str, plan: list[PlannedCall], ledger: CreditLedger) -> No
         f"Ledger: spent {ledger.cumulative_spent} / {ledger.hard_cap}; "
         f"remaining {ledger.remaining}"
     )
+    print(f"Account credits left: {trial_credits - ledger.cumulative_spent}")
 
 
 def _coordinates(response: ProviderResponse | None) -> tuple[float, float] | None:
@@ -299,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env(dotenv_path=os.devnull)
     ledger = CreditLedger(settings.credit_hard_cap)
     plan = _plan(args.stage)
-    _print_plan(args.stage, plan, ledger)
+    _print_plan(args.stage, plan, ledger, settings.trial_credits)
     if not args.execute:
         return 0
     prompt = (

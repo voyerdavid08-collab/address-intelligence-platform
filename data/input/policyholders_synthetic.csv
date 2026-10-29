@@ -1,0 +1,201 @@
+policy_id,line_of_business,effective_date,insured_value_band,metro,street_id,raw_address_line1,raw_address_line2,raw_city,raw_state,raw_zip5
+POL-000001,Homeowners,2026-02-05,>1M,New Orleans LA,NOL-07,1141 Napoheon Ave,Apt 3,New Orleans,LA,70115
+POL-000002,Homeowners,2025-09-16,500k-1M,Tampa-St Petersburg FL,TPA-02,1123 W Kennedy Blvd,,Tampa,FL,33606
+POL-000003,Commercial Property,2024-10-14,500k-1M,New Orleans LA,NOL-06,3112 Gentilly Blvd,,New Orleans,LA,
+POL-000004,Commercial Property,2026-07-18,500k-1M,New Orleans LA,NOL-03,1014 Canal St,,New Orleans,LA,
+POL-000005,Commercial Property,2025-04-24,500k-1M,Tampa-St Petersburg FL,TPA-01,1151 Bayshore Blvd,,Tampa,FL,33606
+POL-000006,Homeowners,2025-10-13,>1M,New Orleans LA,NOL-06,3084 Gentilly Blvd,,New Orleans,LA,70122
+POL-000007,Homeowners,2025-01-12,<250k,New Orleans LA,NOL-05,1179 S Carrollton Ave,,New Orleans,LA,70118
+POL-000008,Homeowners,2024-08-06,<250k,Boulder CO,BOU-04,1118 Canyon Blvd,,Boulder,CO,80302
+POL-000009,Homeowners,2026-09-28,>1M,New Orleans LA,NOL-07,1194 Napoleon Ave,,New Orleans,LA,70115
+POL-000010,Homeowners,2025-10-11,<250k,Charleston SC,CHS-01,367 King St,,Charleston,SC,29401
+POL-000011,Homeowners,2026-10-10,500k-1M,Charleston SC,CHS-03,163 East Bay St,,Charleston,SC,29401
+POL-000012,Homeowners,2025-08-18,>1M,Miami-Miami Beach FL,MIA-03,1026 Coral Way,,Miami,FL,33134
+POL-000013,Homeowners,2024-03-13,500k-1M,Miami-Miami Beach FL,MIA-03,1140 Coral Way,,Miami,FL,33134
+POL-000014,Homeowners,2024-12-24,>1M,New Orleans LA,NOL-03,1053 Canal St,,New Orleans,LA,70112
+POL-000015,Commercial Property,2026-10-15,>1M,Houston TX,HOU-05,1045 N Shepherd Dr,,Houstox,TX,
+POL-000016,Homeowners,2024-12-09,>1M,Tampa-St Petersburg FL,TPA-06,1068 4th St N,,St Petersburg,FL,33701
+POL-000017,Homeowners,2024-06-14,<250k,Charleston SC,CHS-05,Broad St,,Charleston,SC,29401
+POL-000018,Homeowners,2025-08-18,500k-1M,Houston TX,HOU-02,1842 Kirby Dr,,Houston,TX,77019
+POL-000019,Homeowners,2026-08-18,500k-1M,Boulder CO,BOU-07,1059 Baseline Rd,,Boulder,CO,80302
+POL-000020,Homeowners,2024-10-23,>1M,Tampa-St Petersburg FL,TPA-07,1015 1st Ove N,,St Petersburg,FL,33705
+POL-000021,Homeowners,2025-12-15,<250k,Charleston SC,CHS-03,109 East Bay St,,Charleston,SC,29401
+POL-000022,Homeowners,2024-05-25,<250k,Tampa-St Petersburg FL,TPA-04,1026 N Nebraska Ave,,Tampa,FL,33602
+POL-000023,Commercial Property,2024-11-29,>1M,Miami-Miami Beach FL,MIA-04,SW 8th St,,Miami,FL,33130
+POL-000024,Commercial Property,2025-05-15,>1M,Houston TX,HOU-07,2175 Telephone Rd,,Houston,TX,77023
+POL-000025,Homeowners,2026-04-26,500k-1M,New Orleans LA,NOL-03,1104 Canal St,,New Orleans,LA,70112
+POL-000026,Commercial Property,2024-04-09,500k-1M,Miami-Miami Beach FL,MIA-02,W Flagler St,,Miami,FL,33130
+POL-000027,Homeowners,2024-11-12,500k-1M,Houston TX,HOU-03,2120 Richmond Ave,,Houston,TX,77098
+POL-000028,Homeowners,2024-03-09,>1M,Miami-Miami Beach FL,MIA-07,1139 Washington Ave,,Miami Beach,FL,33139
+POL-000029,Homeowners,2025-02-26,<250k,Houston TX,HOU-07,2047 Tejephone Rd,,Houston,TX,77023
+POL-000030,Homeowners,2026-07-18,500k-1M,Boulder CO,BOU-06,1176 28th St,,Bouader,CO,80303
+POL-000031,Homeowners,2025-01-07,>1M,Tampa-St Petersburg FL,TPA-07,1165 1st Ave N,,St Petersburg,FL,33705
+POL-000032,Commercial Property,2024-08-28,500k-1M,New Orleans LA,NOL-01,1088 St Charles Ave,,New Orleans,LA,70130
+POL-000033,Homeowners,2025-09-12,>1M,New Orleans LA,NOL-01,1054 St Charles Ave,,New Orleans,LA,70130
+POL-000034,Homeowners,2025-07-06,250-500k,Miami-Miami Beach FL,MIA-02,1193 W Flagler St,,Miami,FL,33130
+POL-000035,Homeowners,2024-09-07,500k-1M,Miami-Miami Beach FL,MIA-06,51198 Alton Rd,,Miami Beach,FL,33139
+POL-000036,Homeowners,2024-09-02,<250k,Tampa-St Petersburg FL,TPA-05,1061 Central Ave,,St Petersburg,FL,33705
+POL-000037,Homeowners,2026-01-19,>1M,Houston TX,HOU-05,1143 N Shepherd Dr,,Houston,TX,77008
+POL-000038,Homeowners,2025-12-24,<250k,Charleston SC,CHS-07,2041 Folly Rd,,Charleston,SC,29412
+POL-000039,Homeowners,2024-05-06,250-500k,Charleston SC,CHS-05,168 Broad St,,Charleston,SC,29401
+POL-000040,Homeowners,2024-04-03,>1M,Charleston SC,CHS-02,146 Meeting St,,Charleston,SC,29401
+POL-000041,Homeowners,2024-08-14,<250k,Miami-Miami Beach FL,MIA-04,1097 SW 8th Sz,,Miami,FL,33130
+POL-000042,Homeowners,2025-02-18,>1M,Boulder CO,BOU-05,1160 Spruce St,,Boulder,CO,80302
+POL-000043,Homeowners,2024-04-05,500k-1M,Houston TX,HOU-06,2015 Allen Pkwy,,Houspon,TX,70130
+POL-000044,Homeowners,2024-09-26,>1M,New Orleans LA,NOL-05,1016 S Carrollton Ave,,New Orleans,LA,70118
+POL-000045,Homeowners,2026-08-09,>1M,Miami-Miami Beach FL,MIA-05,1143 Collins Ave,,Miami Beach,FL,33139
+POL-000046,Homeowners,2025-11-24,<250k,Houston TX,HOU-04,2069 Bissonnet St,,Houston,TX,77005
+POL-000047,Homeowners,2025-01-25,<250k,Miami-Miami Beach FL,MIA-07,1039 Washington Ave,Unit 2A,Miami Beach,FL,33139
+POL-000048,Homeowners,2025-08-09,250-500k,Tampa-St Petersburg FL,TPA-01,1183 Bayshore Blvd,,Tampa,FL,33606
+POL-000049,Homeowners,2024-05-17,250-500k,Houston TX,HOU-03,2160 Richmond Ave,,Houston,TX,77098
+POL-000050,Homeowners,2024-05-27,250-500k,Boulder CO,BOU-01,1164 Broadway,,Boulder,CO,80302
+POL-000051,Homeowners,2026-02-16,250-500k,Miami-Miami Beach FL,MIA-04,1057 SW 8th St,,Miami,FL,33130
+POL-000052,Homeowners,2025-08-18,<250k,Charleston SC,CHS-02,153 Meeting St,,Chawleston,SC,29401
+POL-000053,Homeowners,2026-05-22,>1M,Houston TX,HOU-07,2098 Telephone Rd,,Houston,TX,77023
+POL-000054,Homeowners,2025-09-26,>1M,New Orleans LA,NOL-01,1131 St Charles Ave,Apt 3,New Orleans,LA,70130
+POL-000055,Homeowners,2026-06-20,500k-1M,Boulder CO,BOU-06,1059 28th St,,Boulder,CO,80303
+POL-000056,Homeowners,2025-11-04,500k-1M,Boulder CO,BOU-05,1032 Spruce St,,Boulder,CO,80302
+POL-000057,Homeowners,2025-07-16,250-500k,Miami-Miami Beach FL,MIA-01,1188 Biscayne Blvd,,Miami,FL,33132
+POL-000058,Homeowners,2025-08-15,>1M,Charleston SC,CHS-07,2037 Folly Rd,,Charleston,SC,29412
+POL-000059,Commercial Property,2023-11-21,<250k,Charleston SC,CHS-01,368 King St,,Charleston,SC,
+POL-000060,Homeowners,2025-11-26,500k-1M,Tampa-St Petersburg FL,TPA-07,1161 1st Ave N,,St Petersburg,FL,
+POL-000061,Commercial Property,2026-05-15,<250k,Houston TX,HOU-01,52198 Westheimer Rd,,Houston,TX,77098
+POL-000062,Homeowners,2023-12-31,>1M,Miami-Miami Beach FL,MIA-05,1189 Collins Ave,Unit 4,Miami Beach,FL,
+POL-000063,Homeowners,2026-01-06,<250k,Boulder CO,BOU-04,1056 Canyon Blvd,,Boulder,CO,80302
+POL-000064,Homeowners,2026-05-11,<250k,Miami-Miami Beach FL,MIA-02,1067 W Flagler St,Unit 4,Miazi,FL,33130
+POL-000065,Homeowners,2026-07-13,<250k,Charleston SC,CHS-04,161 Cavhoun St,,Charleston,SC,29401
+POL-000066,Homeowners,2026-07-05,250-500k,Boulder CO,BOU-02,1019 Pearl St,,Boulder,CO,80302
+POL-000067,Homeowners,2025-01-17,>1M,Boulder CO,BOU-04,1177 Canyon Blvd,,Boulder,CO,
+POL-000068,Homeowners,2026-07-11,500k-1M,Miami-Miami Beach FL,MIA-05,1005 Collins Ave,,Miami Beach,FL,33139
+POL-000069,Homeowners,2025-08-15,<250k,Tampa-St Petersburg FL,TPA-04,1142 N Nebraska Ave,,Tampa,FL,33602
+POL-000070,Homeowners,2025-10-24,>1M,Tampa-St Petersburg FL,TPA-01,1027 Bayshore Blvd,,Tampa,FL,
+POL-000071,Homeowners,2025-03-23,500k-1M,Tampa-St Petersburg FL,TPA-03,3100 S Dale Mabry Hwy,,Tampa,FL,33629
+POL-000072,Commercial Property,2024-05-13,>1M,Miami-Miami Beach FL,MIA-03,1145 Xoral Way,,Miami,FL,33134
+POL-000073,Homeowners,2025-09-09,>1M,Tampa-St Petersburg FL,TPA-06,51198 4th St N,,St Petersburg,FL,33701
+POL-000074,Homeowners,2025-09-14,>1M,Tampa-St Petersburg FL,TPA-06,51199 4th St N,,St Petersburg,FL,33701
+POL-000075,Homeowners,2026-07-22,500k-1M,Houston TX,HOU-01,2106 Westheimer Rd,Unit 2A,Houston,TX,77098
+POL-000076,Homeowners,2025-02-18,>1M,New Orleans LA,NOL-05,1035 S Carrollton Ave,Apt 3,New Orleans,LA,70118
+POL-000077,Homeowners,2024-07-18,250-500k,Charleston SC,CHS-04,177 Calhoun St,,Charleston,SC,29401
+POL-000078,Homeowners,2026-07-13,250-500k,Charleston SC,CHS-07,2046 Folly Rd,,Charleston,SC,29412
+POL-000079,Commercial Property,2025-05-26,<250k,Boulder CO,BOU-03,1173 Arapahoe Ave,,Boulder,CO,80302
+POL-000080,Homeowners,2026-10-23,>1M,Charleston SC,CHS-06,3197 Savannah Hwy,,Charleston,SC,29414
+POL-000081,Homeowners,2026-02-10,500k-1M,Boulder CO,BOU-02,1141 Pearl St,Apt 2B,Boulder,CO,80302
+POL-000082,Commercial Property,2024-03-21,>1M,New Orleans LA,NOL-07,1170 Naposeon Ave,,New Orleans,LA,70115
+POL-000083,Homeowners,2025-06-02,250-500k,Boulder CO,BOU-01,1110 Broadway,,Boulder,CO,80302
+POL-000084,Homeowners,2025-03-08,500k-1M,Houston TX,HOU-03,2013 Richmond Ave,,Houston,TX,77098
+POL-000085,Commercial Property,2024-12-06,500k-1M,New Orleans LA,NOL-02,1028 Magazine St,,New Orleans,LA,70130
+POL-000086,Homeowners,2025-09-21,<250k,Houston TX,HOU-02,1831 Kirby Dr,,Houston,TX,77019
+POL-000087,Homeowners,2025-11-01,250-500k,Houston TX,HOU-03,2179 Richmond Ave,,Houston,TX,77098
+POL-000088,Commercial Property,2025-09-04,500k-1M,Houston TX,HOU-07,2077 Telpphone Rd,,Houston,TX,77023
+POL-000089,Homeowners,2026-04-27,250-500k,Tampa-St Petersburg FL,TPA-05,1144 Central Ave,,St Petersbuzg,FL,33134
+POL-000090,Homeowners,2025-09-04,>1M,Houston TX,HOU-05,1014 N Ghepherd Dr,,Houston,TX,
+POL-000091,Homeowners,2024-12-15,500k-1M,Boulder CO,BOU-07,1080 Zaseline Rd,,Boulder,CO,80302
+POL-000092,Homeowners,2026-07-18,<250k,Tampa-St Petersburg FL,TPA-01,1074 Bayshore Blvd,,Tampa,FL,33606
+POL-000093,Homeowners,2026-10-25,<250k,Miami-Miami Beach FL,MIA-01,1037 Biscayne Blvd,,Miami,FL,33132
+POL-000094,Homeowners,2025-09-19,>1M,Miami-Miami Beach FL,MIA-03,Coral Way,,Miami,FL,33134
+POL-000095,Homeowners,2025-12-26,>1M,New Orleans LA,NOL-06,3100 Gentilly Blvd,,New Orleans,LA,70122
+POL-000096,Homeowners,2025-01-30,<250k,New Orleans LA,NOL-04,1180 S Claiborne Ave,,New Orleans,LA,70125
+POL-000097,Homeowners,2024-07-19,<250k,Tampa-St Petersburg FL,TPA-03,3129 S Dale Mabry Hwy,,Tampa,FL,33629
+POL-000098,Homeowners,2023-11-15,250-500k,Tampa-St Petersburg FL,TPA-05,51198 Central Ave,,St Petersburg,FL,33705
+POL-000099,Homeowners,2026-09-22,250-500k,Charleston SC,CHS-03,East Bay St,,Charleston,SC,29401
+POL-000100,Homeowners,2025-08-29,500k-1M,Miami-Miami Beach FL,MIA-06,1114 Alton Rd,,Miami Beach,FL,33139
+POL-000101,Commercial Property,2024-10-09,<250k,Tampa-St Petersburg FL,TPA-02,W Kennedy Blvd,,Tampa,FL,33606
+POL-000102,Homeowners,2026-05-30,250-500k,Tampa-St Petersburg FL,TPA-04,1110 N Nebraska Ave,,Tampa,FL,33602
+POL-000103,Homeowners,2025-11-24,250-500k,Miami-Miami Beach FL,MIA-06,1059 Alton Rd,,Miami Beach,FL,33139
+POL-000104,Commercial Property,2024-12-14,250-500k,Miami-Miami Beach FL,MIA-07,1070 Washington Ave,,Miami Beach,FL,33139
+POL-000105,Homeowners,2025-04-10,250-500k,Miami-Miami Beach FL,MIA-01,1025 Biscayne Blvd,,Miami,FL,
+POL-000106,Homeowners,2025-04-05,500k-1M,New Orleans LA,NOL-05,51198 S Carrollton Ave,,New Orleans,LA,70118
+POL-000107,Homeowners,2024-06-19,250-500k,Houston TX,HOU-05,1020 N Shepherd Dr,,Houston,TX,77008
+POL-000108,Homeowners,2024-12-21,500k-1M,Boulder CO,BOU-01,1161 Broadway,,Boulder,CO,80302
+POL-000109,Homeowners,2025-12-25,<250k,Houston TX,HOU-07,2010 Telephone Rd,,Houston,TX,77023
+POL-000110,Homeowners,2025-11-15,250-500k,Charleston SC,CHS-01,314 King St,Unit 2A,Charleston,SC,77008
+POL-000111,Homeowners,2024-10-29,250-500k,Boulder CO,BOU-02,1138 Pearl St,,Boulder,CO,80302
+POL-000112,Homeowners,2026-01-25,250-500k,Houston TX,HOU-04,2014 Bissonnet St,,Houston,TX,77005
+POL-000113,Homeowners,2025-07-22,>1M,Houston TX,HOU-02,1977 Kirby Dr,,Houston,TX,77019
+POL-000114,Commercial Property,2026-03-18,250-500k,Houston TX,HOU-04,2160 Bissonnet St,Apt 3,Houston,TX,77005
+POL-000115,Homeowners,2024-05-22,500k-1M,Miami-Miami Beach FL,MIA-01,1170 Bdscayne Blvd,,Miami,FL,33132
+POL-000116,Homeowners,2024-11-08,250-500k,New Orleans LA,NOL-02,1156 Magazine St,,New Orleans,LA,70130
+POL-000117,Homeowners,2025-12-03,250-500k,Miami-Miami Beach FL,MIA-01,Biscayne Blvd,,Miami,FL,33132
+POL-000118,Homeowners,2025-03-21,500k-1M,Tampa-St Petersburg FL,TPA-07,1005 1st Ave N,,St Petersburg,FL,33705
+POL-000119,Homeowners,2023-12-26,>1M,Houston TX,HOU-02,1873 Kirby Dr,,Houston,TX,77019
+POL-000120,Homeowners,2026-03-30,500k-1M,Houston TX,HOU-01,2161 Westheimer Rd,,Houston,TX,77098
+POL-000121,Homeowners,2025-06-07,>1M,Boulder CO,BOU-05,1170 Spruce St,,Boulder,CO,80302
+POL-000122,Homeowners,2025-04-25,<250k,Charleston SC,CHS-06,3190 Savannah Hwy,Unit 4,Charleston,SC,29414
+POL-000123,Homeowners,2026-09-01,<250k,Miami-Miami Beach FL,MIA-02,1077 W Flagler St,,Miami,FL,80302
+POL-000124,Homeowners,2024-02-10,>1M,New Orleans LA,NOL-07,1132 Napoleon Ave,,New Orleans,LA,70115
+POL-000125,Homeowners,2026-06-29,>1M,Miami-Miami Beach FL,MIA-05,1170 Collins Ave,,Miami Beach,FL,33139
+POL-000126,Homeowners,2024-08-09,500k-1M,Charleston SC,CHS-02,147 Meeting St,,Charleston,SC,29401
+POL-000127,Homeowners,2024-04-07,<250k,Tampa-St Petersburg FL,TPA-05,1152 Central Ave,,St Peterspurg,FL,33705
+POL-000128,Homeowners,2023-11-17,500k-1M,Boulder CO,BOU-05,1080 Spruce St,Apt 2B,Boelder,CO,80302
+POL-000129,Homeowners,2024-08-29,<250k,New Orleans LA,NOL-05,1013 S Carrollton Ave,,New Orleans,LA,70118
+POL-000130,Homeowners,2024-08-29,250-500k,Tampa-St Petersburg FL,TPA-03,3053 S Dale Mabry Hwy,,Tampa,FL,33629
+POL-000131,Homeowners,2026-05-18,500k-1M,New Orleans LA,NOL-04,1188 S Claiborge Ave,,New Orleans,LA,70125
+POL-000132,Homeowners,2026-06-21,250-500k,Houston TX,HOU-02,1933 Kirby Dr,,Houston,TX,77019
+POL-000133,Homeowners,2024-02-11,<250k,Charleston SC,CHS-04,181 Calhoun St,,Charlestok,SC,29401
+POL-000134,Homeowners,2024-03-13,<250k,New Orleans LA,NOL-02,1052 Magazine St,,New Orleans,LA,70130
+POL-000135,Homeowners,2025-03-24,500k-1M,Boulder CO,BOU-06,1137 28th St,,Boulder,CO,80303
+POL-000136,Homeowners,2026-02-11,>1M,Charleston SC,CHS-05,169 Broad St,,Charleston,SC,29401
+POL-000137,Homeowners,2025-09-02,<250k,Houston TX,HOU-01,2048 Westheimer Rd,,Houston,TX,
+POL-000138,Homeowners,2026-07-29,<250k,Boulder CO,BOU-01,Broadway,Unit 2A,Boulder,CO,80302
+POL-000139,Homeowners,2025-10-03,<250k,Miami-Miami Beach FL,MIA-05,1105 Collins Ave,,Miami Beach,FL,33139
+POL-000140,Homeowners,2026-10-05,>1M,Charleston SC,CHS-04,145 Calhoun St,,Charleston,SC,29401
+POL-000141,Homeowners,2024-02-09,<250k,Houston TX,HOU-06,2002 Allen Pkwy,,Houston,TX,77019
+POL-000142,Homeowners,2025-01-25,<250k,New Orleans LA,NOL-04,S Claiborne Ave,Apt 2B,New Orleans,LA,70125
+POL-000143,Homeowners,2024-08-18,250-500k,Boulder CO,BOU-07,1147 Baseline Rd,,Boulder,CO,70130
+POL-000144,Homeowners,2024-06-05,500k-1M,Houston TX,HOU-04,2140 Bissonnet St,,Houston,TX,77005
+POL-000145,Homeowners,2025-07-13,250-500k,Tampa-St Petersburg FL,TPA-02,1089 W Kennedy Blvj,,Tzmpa,FL,33606
+POL-000146,Homeowners,2025-01-13,>1M,Miami-Miami Beach FL,MIA-06,1126 Alton Rd,,Miami Beach,FL,33139
+POL-000147,Homeowners,2026-03-03,<250k,Boulder CO,BOU-03,1019 Arapahoe Pve,,Bouldej,CO,80302
+POL-000148,Commercial Property,2025-01-18,500k-1M,Charleston SC,CHS-03,129 East Bay St,,Charleston,SC,29401
+POL-000149,Commercial Property,2024-05-03,<250k,New Orleans LA,NOL-07,1143 Napolyon Ave,,New Orleans,LA,70115
+POL-000150,Homeowners,2026-06-01,>1M,New Orleans LA,NOL-06,3145 Gentilly Blvd,,New Orleans,LA,70122
+POL-000151,Commercial Property,2025-04-19,250-500k,Miami-Miami Beach FL,MIA-07,1016 Washington Ave,,Miami Beach,FL,33139
+POL-000152,Homeowners,2023-11-02,500k-1M,Charleston SC,CHS-06,3084 Savannah Hwy,,Charleston,SC,
+POL-000153,Homeowners,2026-09-05,500k-1M,Tampa-St Petersburg FL,TPA-02,1111 W Kennedy Blvd,,Tampa,FL,33606
+POL-000154,Homeowners,2023-11-08,>1M,Charleston SC,CHS-05,170 Broad St,,Charleston,SC,29401
+POL-000155,Homeowners,2025-12-11,250-500k,Boulder CO,BOU-06,28th St,,Boulder,CO,80303
+POL-000156,Homeowners,2024-10-07,500k-1M,New Orleans LA,NOL-06,3151 Gentilly Blvd,,New Orleans,LA,70122
+POL-000157,Homeowners,2026-02-19,250-500k,Houston TX,HOU-06,2163 Allen Pkwy,,Houston,TX,77019
+POL-000158,Homeowners,2026-07-08,500k-1M,Boulder CO,BOU-02,1133 Pearl St,Unit 4,Boulder,CO,80302
+POL-000159,Commercial Property,2024-11-13,500k-1M,Houston TX,HOU-06,2069 Allen Pkwy,,Houston,TX,77019
+POL-000160,Homeowners,2026-07-29,<250k,Tampa-St Petersburg FL,TPA-05,1168 Central Ave,,St Petersburg,FL,33705
+POL-000161,Homeowners,2026-06-30,<250k,Charleston SC,CHS-04,149 Calhoun St,,Charleston,SC,29401
+POL-000162,Commercial Property,2026-04-21,250-500k,Houston TX,HOU-04,2000 Bissonnet St,Unit 2A,Houston,TX,77005
+POL-000163,Homeowners,2026-03-17,<250k,New Orleans LA,NOL-01,51198 St Charles Ave,Unit 4,New Orleans,LA,70130
+POL-000164,Commercial Property,2023-12-28,>1M,Boulder CO,BOU-07,1017 Baselire Rd,,Boulder,CO,80302
+POL-000165,Homeowners,2024-02-21,500k-1M,New Orleans LA,NOL-03,1025 Canal St,,New Orleans,LA,70112
+POL-000166,Homeowners,2025-03-07,250-500k,Miami-Miami Beach FL,MIA-04,1181 SW 8th St,,Miami,FL,33130
+POL-000167,Homeowners,2025-02-25,<250k,Charleston SC,CHS-01,398 King St,,Charleston,SC,29401
+POL-000168,Homeowners,2024-11-20,250-500k,New Orleans LA,NOL-02,1001 Magazine St,,New Orleans,LA,70130
+POL-000169,Commercial Property,2024-03-10,500k-1M,Charleston SC,CHS-02,196 Meeting St,,Charleston,SC,
+POL-000170,Homeowners,2026-10-17,<250k,Charleston SC,CHS-01,377 King Zt,,Charleston,SC,29401
+POL-000171,Homeowners,2026-06-14,250-500k,Boulder CO,BOU-04,1102 Canyon Blvd,,Boulder,CO,80302
+POL-000172,Homeowners,2024-12-22,>1M,Tampa-St Petersburg FL,TPA-01,1097 Bayshore Blvd,,Tampa,FL,33606
+POL-000173,Commercial Property,2025-10-17,250-500k,Miami-Miami Beach FL,MIA-07,1084 Washington Ave,,Miami Beach,FL,33139
+POL-000174,Homeowners,2024-02-23,250-500k,Tampa-St Petersburg FL,TPA-06,1042 4th St N,,St Petersburg,FL,77019
+POL-000175,Homeowners,2024-09-14,>1M,Tampa-St Petersburg FL,TPA-03,3049 S Dale Mabry Hwy,,Tampa,FL,33629
+POL-000176,Homeowners,2023-11-10,>1M,New Orleans LA,NOL-02,1107 Magazine St,Unit 2A,New Orleans,LA,80303
+POL-000177,Homeowners,2026-04-22,<250k,Tampa-St Petersburg FL,TPA-03,3081 S Dale Mabry Hwy,,Tampa,FL,70115
+POL-000178,Homeowners,2025-09-15,<250k,Charleston SC,CHS-07,2161 Folly Rd,,Charleston,SC,29412
+POL-000179,Homeowners,2024-10-31,500k-1M,Houston TX,HOU-03,2081 Richmond Ave,Apt 3,Housdon,TX,
+POL-000180,Homeowners,2026-03-25,>1M,Miami-Miami Beach FL,MIA-04,1112 SW 8th Mt,,Miami,FL,
+POL-000181,Commercial Property,2026-08-28,>1M,Houston TX,HOU-01,2043 Westheimer Rx,Unit 4,Houston,TX,77098
+POL-000182,Commercial Property,2026-04-11,<250k,Miami-Miami Beach FL,MIA-06,1065 Alton Rd,,Miami Beach,FL,33139
+POL-000183,Homeowners,2026-09-09,250-500k,Boulder CO,BOU-03,1045 Arapahoe Ave,,Boulder,CO,80302
+POL-000184,Homeowners,2024-07-03,500k-1M,Tampa-St Petersburg FL,TPA-04,1144 N Nebraska Ave,,Tampa,FL,33602
+POL-000185,Homeowners,2025-10-01,<250k,New Orleans LA,NOL-04,1191 S Claiborne Ave,,New Orleans,LA,
+POL-000186,Homeowners,2026-03-19,<250k,Tampa-St Petersburg FL,TPA-07,1084 1st Ave N,,St Petersburg,FL,33705
+POL-000187,Commercial Property,2024-04-26,>1M,Tampa-St Petersburg FL,TPA-02,1156 W Kennedy Blvd,,Tampa,FL,33606
+POL-000188,Homeowners,2025-05-17,>1M,Tampa-St Petersburg FL,TPA-04,1009 N Nebraska Ave,,Tampa,FL,33602
+POL-000189,Homeowners,2026-06-24,>1M,New Orleans LA,NOL-03,1064 Canal St,,New Orleans,LA,70112
+POL-000190,Homeowners,2026-02-26,250-500k,Tampa-St Petersburg FL,TPA-06,1047 4th St N,,St Petersburg,FL,33701
+POL-000191,Homeowners,2026-03-09,<250k,New Orleans LA,NOL-01,1148 St Charles Ave,,New Orleans,LA,70130
+POL-000192,Homeowners,2024-09-19,250-500k,Miami-Miami Beach FL,MIA-03,1189 Coral Way,,Miami,FL,70112
+POL-000193,Homeowners,2024-04-08,500k-1M,Houston TX,HOU-05,1188 N Shepherd Dr,,Houston,TX,77008
+POL-000194,Homeowners,2026-07-28,>1M,Charleston SC,CHS-03,131 East Bay St,,Charleston,SC,29401
+POL-000195,Homeowners,2026-06-16,500k-1M,Charleston SC,CHS-06,3135 Savannah Hwy,,Charleston,SC,29414
+POL-000196,Homeowners,2024-02-29,250-500k,Houston TX,HOU-06,2180 Allen Ckwy,,Houston,TX,77019
+POL-000197,Homeowners,2024-01-18,>1M,Boulder CO,BOU-03,1178 Arapahoe Ave,,Boulder,CO,80302
+POL-000198,Homeowners,2025-08-17,<250k,Miami-Miami Beach FL,MIA-02,51198 W Flagler St,,Miami,FL,33130
+POL-000199,Commercial Property,2025-10-11,>1M,Charleston SC,CHS-02,169 Meeting St,,Charleston,SC,33602
+POL-000200,Homeowners,2024-06-27,>1M,New Orleans LA,NOL-04,1006 S Claiborne Ave,,New Orleans,LA,70125

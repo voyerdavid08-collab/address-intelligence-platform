@@ -17,6 +17,7 @@ def _settings() -> Settings:
         api_secret="test-secret",
         base_url="https://api.precisely.com",
         credit_hard_cap=Decimal("100"),
+        trial_credits=Decimal("2500"),
         log_level="INFO",
     )
 

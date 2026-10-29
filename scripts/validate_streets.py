@@ -183,7 +183,11 @@ def validate_rows(
     return results, stopped_for_cap
 
 
-def _print_plan(rows: list[dict[str, str]], ledger: CreditLedger) -> None:
+def _print_plan(
+    rows: list[dict[str, str]],
+    ledger: CreditLedger,
+    trial_credits: Decimal,
+) -> None:
     print("Planned Geocode Premium validation calls:")
     for row in rows:
         print(f"- {row['street_id']} ({row['metro']}): {_planned_address(row)} - 1 credit")
@@ -194,6 +198,25 @@ def _print_plan(rows: list[dict[str, str]], ledger: CreditLedger) -> None:
         f"Ledger: spent {ledger.cumulative_spent} / {ledger.hard_cap}; "
         f"remaining {ledger.remaining}"
     )
+    print(f"Account credits left: {trial_credits - ledger.cumulative_spent}")
+
+
+def _read_validation_results(path: Path) -> list[ValidationResult]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8-sig") as source:
+        reader = csv.DictReader(source)
+        if tuple(reader.fieldnames or ()) != RESULT_COLUMNS:
+            raise ValueError("Validation CSV has unexpected columns.")
+        return [
+            ValidationResult(
+                row["street_id"],
+                row["status"],
+                row["reason"],
+                row["validated_on"],
+            )
+            for row in reader
+        ]
 
 
 def _print_summary(
@@ -201,25 +224,38 @@ def _print_summary(
     results: list[ValidationResult],
     *,
     stopped_for_cap: bool,
+    current_results: list[ValidationResult] | None = None,
 ) -> None:
     metro_by_id = {row["street_id"]: row["metro"] for row in rows}
+    result_by_id = {result.street_id: result for result in results}
     counts: dict[str, dict[str, int]] = {}
     rejection_reasons: dict[str, int] = {}
-    for result in results:
-        metro = metro_by_id[result.street_id]
-        metro_counts = counts.setdefault(metro, {"accepted": 0, "rejected": 0})
-        outcome = "accepted" if result.status.startswith("accepted") else "rejected"
-        metro_counts[outcome] += 1
-        if outcome == "rejected":
+    for row in rows:
+        result = result_by_id.get(row["street_id"])
+        if result is None:
+            continue
+        metro = metro_by_id[row["street_id"]]
+        metro_counts = counts.setdefault(
+            metro, {"accepted": 0, "rejected": 0, "pending": 0}
+        )
+        if result.status.startswith("accepted"):
+            metro_counts["accepted"] += 1
+        elif result.status.startswith("rejected"):
+            metro_counts["rejected"] += 1
             rejection_reasons[result.reason] = rejection_reasons.get(result.reason, 0) + 1
+        else:
+            metro_counts["pending"] += 1
 
     print("Validation summary by metro:")
     for metro in dict.fromkeys(row["metro"] for row in rows):
-        metro_counts = counts.get(metro, {"accepted": 0, "rejected": 0})
+        metro_counts = counts.get(
+            metro, {"accepted": 0, "rejected": 0, "pending": 0}
+        )
         not_run = sum(row["metro"] == metro for row in rows) - sum(metro_counts.values())
         print(
             f"- {metro}: accepted {metro_counts['accepted']}, "
-            f"rejected {metro_counts['rejected']}, not run {not_run}"
+            f"rejected {metro_counts['rejected']}, pending {metro_counts['pending']}, "
+            f"not run {not_run}"
         )
         if metro_counts["accepted"] < 5:
             print(f"  WARNING: fewer than 5 accepted streets for {metro}.")
@@ -230,11 +266,9 @@ def _print_summary(
             print(f"- {reason}: {count}")
     else:
         print("- none")
-    zip_mismatches = [
-        result
-        for result in results
-        if result.reason == "ZIP mismatch" and result.returned_zip5 is not None
-    ]
+    display_results = current_results if current_results is not None else results
+    zip_mismatches = [result for result in display_results
+                      if result.reason == "ZIP mismatch" and result.returned_zip5 is not None]
     for result in zip_mismatches:
         print(
             f"- {result.street_id}: ZIP mismatch; returned ZIP5 "
@@ -259,7 +293,8 @@ def main(
     )
     args = parser.parse_args(argv)
 
-    rows = _read_reference(input_path)
+    all_rows = _read_reference(input_path)
+    rows = all_rows
     if args.ids is not None:
         requested_ids = {street_id.strip() for street_id in args.ids.split(",") if street_id.strip()}
         available_ids = {row["street_id"] for row in rows}
@@ -271,7 +306,7 @@ def main(
         rows = [row for row in rows if row["street_id"] in requested_ids]
     settings = Settings.from_env(dotenv_path=os.devnull)
     ledger = CreditLedger(settings.credit_hard_cap)
-    _print_plan(rows, ledger)
+    _print_plan(rows, ledger, settings.trial_credits)
     if not args.execute:
         return 0
     if input("Type YES to authorize Geocode Premium validation calls: ").strip() != "YES":
@@ -288,7 +323,12 @@ def main(
         output_root / timestamp,
     )
     _write_results(result_path, results)
-    _print_summary(rows, results, stopped_for_cap=stopped_for_cap)
+    _print_summary(
+        all_rows,
+        _read_validation_results(result_path),
+        stopped_for_cap=stopped_for_cap,
+        current_results=results,
+    )
     return 1 if stopped_for_cap else 0
 
 

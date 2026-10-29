@@ -142,6 +142,7 @@ def test_dry_run_lists_all_plans_without_http_or_credentials(
     assert "2099 Westheimer Rd, Houston, TX 77098" in output
     assert "Planned calls: 1" in output
     assert "Estimated credits: 1" in output
+    assert "Account credits left: 2500" in output
     assert not (tmp_path / "out.csv").exists()
 
 
@@ -253,6 +254,90 @@ def test_ids_filter_dry_run_to_requested_rows(tmp_path, monkeypatch, capsys):
     assert "BOU-02" in output and "BOU-05" in output
     assert "Planned calls: 2" in output
     assert "Estimated credits: 2" in output
+
+
+def test_execution_summary_uses_full_merged_validation_file(
+    tmp_path, monkeypatch, capsys
+):
+    source = tmp_path / "references.csv"
+    rows = [
+        _row(street_id=f"HOU-{index:02}", metro="Houston TX")
+        for index in range(1, 6)
+    ]
+    rows.append(
+        _row(
+            street_id="BOU-99",
+            street_name="Pearl St",
+            city="Boulder",
+            state="CO",
+            zip5="80302",
+            metro="Boulder CO",
+        )
+    )
+    with source.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=rows[0].keys(), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    results_path = tmp_path / "validation.csv"
+    results_path.write_text(
+        "street_id,status,reason,validated_on\n"
+        + "".join(
+            f"HOU-{index:02},accepted,validated,2026-10-29\n"
+            for index in range(1, 6)
+        )
+        + "BOU-99,pending revalidation,pending revalidation,2026-10-29\n",
+        encoding="utf-8",
+    )
+    settings = type(
+        "Settings",
+        (),
+        {
+            "credit_hard_cap": Decimal("2150"),
+            "trial_credits": Decimal("2500"),
+            "api_key": "test-key",
+            "api_secret": "test-secret",
+            "require_api_credentials": lambda self: ("test-key", "test-secret"),
+        },
+    )()
+    monkeypatch.setattr(
+        validate_streets.Settings,
+        "from_env",
+        classmethod(lambda cls, **kwargs: settings),
+    )
+    monkeypatch.setattr(
+        validate_streets,
+        "CreditLedger",
+        lambda cap: Mock(
+            cumulative_spent=Decimal("0"),
+            hard_cap=Decimal(cap),
+            remaining=Decimal(cap),
+        ),
+    )
+    client = Mock()
+    client.geocode.return_value = _candidate_response(
+        state="CO",
+        post_code1="80302",
+    )
+    monkeypatch.setattr(
+        validate_streets,
+        "PreciselyClient",
+        lambda configured, ledger: client,
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt: "YES")
+
+    assert main(
+        ["--execute", "--ids", "BOU-99"],
+        input_path=source,
+        result_path=results_path,
+        output_root=tmp_path / "raw",
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert "Houston TX: accepted 5, rejected 0, pending 0, not run 0" in output
+    assert "WARNING: fewer than 5 accepted streets for Houston TX." not in output
+    assert "Boulder CO: accepted 1, rejected 0, pending 0, not run 0" in output
+    assert client.geocode.call_count == 1
 
 
 def test_cap_exceeded_stops_remaining_validation_calls(tmp_path):

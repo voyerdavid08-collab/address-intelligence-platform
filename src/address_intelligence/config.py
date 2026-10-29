@@ -22,6 +22,7 @@ class Settings:
     api_secret: str | None
     base_url: str
     credit_hard_cap: Decimal
+    trial_credits: Decimal
     log_level: str
 
     @classmethod
@@ -45,6 +46,14 @@ class Settings:
         if not credit_hard_cap.is_finite() or credit_hard_cap <= 0:
             raise ConfigError("CREDIT_HARD_CAP must be a positive number.")
 
+        trial_value = value("TRIAL_CREDITS", "2500")
+        try:
+            trial_credits = Decimal(trial_value)
+        except InvalidOperation:
+            raise ConfigError("TRIAL_CREDITS must be a positive number.") from None
+        if not trial_credits.is_finite() or trial_credits <= 0:
+            raise ConfigError("TRIAL_CREDITS must be a positive number.")
+
         log_level = value("LOG_LEVEL", "INFO").upper()
         if log_level not in logging.getLevelNamesMapping():
             raise ConfigError("LOG_LEVEL must be a valid standard-library logging level.")
@@ -54,6 +63,7 @@ class Settings:
             api_secret=value("PRECISELY_API_SECRET", "") or None,
             base_url=value("PRECISELY_BASE_URL", "https://api.precisely.com"),
             credit_hard_cap=credit_hard_cap,
+            trial_credits=trial_credits,
             log_level=log_level,
         )
 
@@ -76,6 +86,7 @@ class Settings:
             f"api_key={api_key!r}, api_secret={api_secret!r}, "
             f"base_url={self.base_url!r}, "
             f"credit_hard_cap={self.credit_hard_cap!r}, "
+            f"trial_credits={self.trial_credits!r}, "
             f"log_level={self.log_level!r})"
         )
 

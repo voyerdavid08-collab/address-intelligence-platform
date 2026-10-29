@@ -4,6 +4,7 @@ import pytest
 
 from address_intelligence.config import ConfigError, Settings
 from address_intelligence.credits import CreditLedger
+import main as cli
 
 
 def test_settings_repr_masks_secrets(monkeypatch, tmp_path):
@@ -49,6 +50,46 @@ def test_credit_hard_cap_is_decimal(monkeypatch, tmp_path):
     settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
 
     assert settings.credit_hard_cap == Decimal("2150")
+    assert settings.trial_credits == Decimal("2500")
+
+
+def test_trial_credits_must_be_positive(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRIAL_CREDITS", "0")
+
+    with pytest.raises(ConfigError, match="TRIAL_CREDITS"):
+        Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+
+def test_check_config_prints_account_credits_left(monkeypatch, capsys):
+    settings = Settings(
+        api_key=None,
+        api_secret=None,
+        base_url="https://api.precisely.com",
+        credit_hard_cap=Decimal("2150"),
+        trial_credits=Decimal("2500"),
+        log_level="INFO",
+    )
+    ledger = type(
+        "Ledger",
+        (),
+        {
+            "cumulative_spent": Decimal("12.81"),
+            "hard_cap": Decimal("2150"),
+            "remaining": Decimal("2137.19"),
+        },
+    )()
+    monkeypatch.setattr(
+        cli.Settings,
+        "from_env",
+        classmethod(lambda cls: settings),
+    )
+    monkeypatch.setattr(cli, "CreditLedger", lambda cap: ledger)
+    monkeypatch.setattr(cli, "configure_logging", lambda configured: None)
+    monkeypatch.setattr("sys.argv", ["main.py", "--check-config"])
+
+    assert cli.main() == 0
+
+    assert "Account credits left: 2487.19" in capsys.readouterr().out
 
 
 def test_empty_process_values_fall_back_to_dotenv(monkeypatch, tmp_path):
