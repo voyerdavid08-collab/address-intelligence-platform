@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -28,9 +28,16 @@ class Settings:
     def from_env(cls, *, dotenv_path: str | Path | None = None) -> "Settings":
         """Load settings from process environment and an optional local .env."""
         path = Path(dotenv_path) if dotenv_path is not None else PROJECT_ROOT / ".env"
-        load_dotenv(dotenv_path=path, override=False)
+        dotenv_settings = dotenv_values(path)
 
-        cap_value = os.getenv("CREDIT_HARD_CAP", "2150")
+        def value(key: str, default: str) -> str:
+            process_value = os.environ.get(key)
+            if process_value:
+                return process_value
+            dotenv_value = dotenv_settings.get(key)
+            return dotenv_value if dotenv_value else default
+
+        cap_value = value("CREDIT_HARD_CAP", "2150")
         try:
             credit_hard_cap = Decimal(cap_value)
         except InvalidOperation:
@@ -38,14 +45,14 @@ class Settings:
         if not credit_hard_cap.is_finite() or credit_hard_cap <= 0:
             raise ConfigError("CREDIT_HARD_CAP must be a positive number.")
 
-        log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+        log_level = value("LOG_LEVEL", "INFO").upper()
         if log_level not in logging.getLevelNamesMapping():
             raise ConfigError("LOG_LEVEL must be a valid standard-library logging level.")
 
         return cls(
-            api_key=os.getenv("PRECISELY_API_KEY") or None,
-            api_secret=os.getenv("PRECISELY_API_SECRET") or None,
-            base_url=os.getenv("PRECISELY_BASE_URL", "https://api.precisely.com"),
+            api_key=value("PRECISELY_API_KEY", "") or None,
+            api_secret=value("PRECISELY_API_SECRET", "") or None,
+            base_url=value("PRECISELY_BASE_URL", "https://api.precisely.com"),
             credit_hard_cap=credit_hard_cap,
             log_level=log_level,
         )

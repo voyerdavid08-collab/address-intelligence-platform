@@ -18,7 +18,7 @@ PRICE_TABLE: dict[str, Decimal] = {
     "preciselyid_by_address": Decimal("0.01"),
     "flood_by_location": Decimal("5"),
     "distance_to_flood_hazard_by_location": Decimal("2"),
-    "property_attribute": Decimal("1"),
+    "property_attributes_v2": Decimal("1"),
     "property_pbkey": Decimal("0.01"),
     "address_verification_us": Decimal("1"),
     "address_verification_uscan": Decimal("0.33"),

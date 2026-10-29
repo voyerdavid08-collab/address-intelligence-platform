@@ -87,9 +87,11 @@ attributes are enabled for the account before implementation or API use.
    injected defects.
 2. Validate input structure and preserve an immutable copy of each raw
    address.
-3. Run address verification/standardization and geocoding through Precisely
-   APIs after API documentation, account access, and credit budget are
-   verified.
+3. Use Geocode Premium as the sole Precisely verification/standardization and
+   geocoding step after documentation, account access, and credit budget are
+   verified. Address Verification Premium was tested in Phase 0 but is not
+   used in the full run because it returned Status F “Address Not Found” for
+   defective input and still consumed 1 credit.
 4. Persist the provider's PreciselyID when the verified API operation returns
    one, retaining it as a provider-returned identifier rather than inventing
    or deriving one.
@@ -128,12 +130,11 @@ attributes are enabled for the account before implementation or API use.
 flowchart LR
     A[Seeded synthetic data generator] --> B[Input validation and canonical records]
     B --> C[Pipeline orchestrator]
-    C --> D[Precisely address verification adapter]
-    D --> E[Precisely geocoding adapter]
-    E --> F[Eligibility and enrichment workflow]
-    F --> G[Precisely enrichment adapter]
-    E --> H[Canonical result and provenance store]
-    G --> H
+    C --> D[Precisely Geocode Premium verification and geocoding adapter]
+    D --> E[Eligibility and enrichment workflow]
+    E --> F[Precisely enrichment adapter]
+    D --> H[Canonical result and provenance store]
+    F --> H
     H --> I[Quality metrics and before/after report]
     H --> J[Evidence-grounded AI narrative]
     I --> K[CSV or Excel deliverables]
@@ -141,8 +142,7 @@ flowchart LR
     K --> L[Mandatory executive business impact summary]
     M[Settings and secret provider] --> C
     M --> D
-    M --> E
-    M --> G
+    M --> F
 ```
 
 ### Components
@@ -184,15 +184,13 @@ production data platform.
    row count. Fail clearly on malformed input; do not silently drop records.
 3. Create a canonical input record containing synthetic record ID and raw
    address components. Preserve the raw fields unchanged.
-4. Call the verified Precisely address verification/standardization operation.
-   Record status and returned standardized components only when present in
-   the verified response mapping.
-5. Geocode according to the confirmed API workflow. Preserve returned
-   coordinates, quality/status metadata if documented, and PreciselyID only
-   where actually returned and supported.
-6. Apply documented eligibility criteria. Enrich eligible records with the
-   selected 3–5 attributes, subject to verified products, access, credit
-   limits, and returned-data availability.
+4. Use Geocode Premium for address verification/standardization and geocoding.
+   Record returned standardized components, coordinates, and quality/status
+   metadata only when present in the verified response mapping.
+5. Preserve PreciselyID only where actually returned and supported.
+6. Enrich only records with precisionCode S5, S7, or S8. Route other
+   precisionCode results (for example S4, Z*, G*, or S0) to manual review and
+   record the reason.
 7. Record source, stage status, timestamps, and synthetic/API/simulated
    provenance for each output value. Missing and failed values remain missing
    with an explicit reason/status; never substitute invented values.
@@ -252,11 +250,15 @@ materially improves the live demonstration.
 
 ## 7. API dependencies and verification steps
 
-Precisely APIs are explicitly required for address validation, geocoding, and
-enrichment. The assignment points to `developer.precisely.com` and the
-`PreciselyData` GitHub organization. This plan does **not** assert particular
-endpoint paths, authentication flows, product names, request/response fields,
-SDK support, pricing, or per-operation credit use.
+Precisely APIs are explicitly required for address validation/standardization,
+geocoding, and enrichment. Geocode Premium supplies the full-run
+verification/standardization and geocoding step. Address Verification Premium
+was tested in Phase 0 but is excluded from the full run because it returned
+Status F “Address Not Found” for defective input and still consumed 1 credit.
+Use verified API facts recorded in `docs/API_DISCOVERY.md`; do not infer
+undocumented endpoint paths, authentication flows, request/response fields,
+SDK support, pricing, or per-operation credit use. Account-specific product and
+attribute access remains subject to confirmation.
 
 Before implementation or any API call:
 
@@ -380,10 +382,10 @@ counts, not just target percentages.
 
 ## 10. Precisely API credit-budget strategy
 
-The assignment states 2,500 trial credits valid for 30 days; actual current
-account balance, expiration, and operation costs remain unverified. No
-exploratory calls until per-operation credit accounting and product access are
-confirmed.
+The account began with 2,500 trial credits. The Phase 0 smoke test used 13.81
+credits, and the ledger matched the portal dashboard. Address Verification is
+not used in the full run: it returned Status F “Address Not Found” for the
+defective smoke-test input and still consumed 1 credit.
 
 1. Inventory required operations and record verified credit costs, batching
    behavior, and retry/failure billing rules from official docs/account
@@ -392,10 +394,10 @@ confirmed.
    records, accounting for eligibility, retries, and any separate
    validation/geocoding/enrichment operations. Do not assume one request is
    one credit or that batching reduces credits.
-3. Set a hard run limit below available credits. **Recommended initial
-   reserve:** hold back at least 20% (500 credits of the stated 2,500) for
-   unexpected billing, controlled re-runs, and final demonstration; adjust
-   only after actual account rules are understood and record the reason.
+3. Set a hard run limit below available credits. **Approved hard cap:** 2,150
+   credits, retaining approximately
+   14% (350 credits) from the starting balance; the actual smoke-test
+   consumption is included in the Phase 0 budget.
 4. Prefer one small, representative smoke test after budget calculation,
    then inspect result quality and actual balance before the full run.
 5. Use deterministic inputs and persist completed stage outputs so a failed
@@ -403,10 +405,9 @@ confirmed.
    records/stages that need it where provider semantics permit.
 6. Limit enrichment calls to records eligible under documented rules and
    only to selected attributes/products. Confirm whether attributes are
-   separately charged. For the raw-versus-verified location comparison,
-   budget for roughly double enrichment calls on the comparison subset if
-   each location lookup is charged; confirm actual billing and workflow in
-   Phase 0, then size the subset.
+   separately charged. For the coarse-versus-verified comparison, budget
+   Geocode Basic (0.1 credit) and a flood call (5 credits) at the coarse point
+   for each comparison record, in addition to the verified-location enrichment.
 7. Gate execution on an operator-configured maximum and display a clear
    estimate/confirmation before calls. Stop on unexpected credit accounting
    or rate-limit/error patterns; do not blindly retry.
@@ -414,8 +415,8 @@ confirmed.
    budget, pause and disclose the constraint. Do not silently downgrade an
    API-required stage or represent fixtures as actual results.
 
-The reserve percentage is a proposed safety policy, not a Precisely billing
-fact. It can be revisited once official costs are known.
+The reserve percentage reflects the owner-approved hard cap, not a Precisely
+billing rule.
 
 ## 11. Enrichment selection criteria and access dependencies
 
@@ -564,12 +565,17 @@ and attempted counts separately.
 - **Coordinate coverage:** records with valid returned coordinate pairs
   divided by total input and by geocoding attempts; identify partial or
   low-quality results only using documented metadata.
-- **Raw-versus-verified enrichment comparison:** for the same comparison
-  records, compare selected verified enrichment results using raw and
-  standardized/geocoded locations. Measure the share whose hazard category
-  changes when a verified hazard attribute is available. If no hazard
-  attribute is available, report post-verification geocode displacement as a
-  clearly labelled proxy, not a hazard measure.
+- **Exception routing:** records with a precisionCode other than S5/S7/S8 are
+  not enriched; report counts routed to manual review and the recorded reason.
+- **Coarse-versus-verified enrichment comparison:** for the same comparison
+  records, use the Geocode Basic city/postal-level location (0.1 credit) as a
+  proxy for low-precision location assignment; this is not a claim about any
+  specific carrier's process. Compare its flood-zone result with the result at
+  the Geocode Premium verified building location (precisionCode S8/S5/S7),
+  using flood by location at both points. Measure the share whose flood-zone
+  category changes. Premium auto-corrects defective inputs, so comparing raw
+  input with Premium verification would not produce a meaningful location
+  contrast.
 - **Persistent identifier coverage:** records with an actually returned
   PreciselyID divided by geocoding attempts, only if supported.
 - **Enrichment completeness:** non-missing values per selected attribute,
@@ -602,17 +608,22 @@ carrier-provided operational figures if supplied later.
    stated. Explain how verified locations can reduce misrouting/rework; do not
    claim elimination or realized savings without measurement.
 2. **Risk-zone misassignment and revenue exposure:** policies × share whose
-   hazard category changes after verification × average premium differential.
-   Measure the category-change share by enriching raw versus verified
-   locations for the same comparison records. The average premium
+   hazard category changes between a coarse location and a verified building
+   location × average premium differential. Measure this share for the same
+   comparison records by comparing flood-zone enrichment at Geocode Basic's
+   city/postal-level point with Geocode Premium's verified S8/S5/S7 building
+   point. Basic is a proxy for low-precision location assignment, not a claim
+   about any specific carrier's process. Premium auto-corrects defective
+   inputs, so raw-versus-Premium comparison would not show the intended
+   difference. The average premium
    differential is assumed, must be labelled, and must have its source
    stated. Underpricing can create premium leakage/adverse selection;
    overpricing can reduce competitiveness and retention. Do not claim actual
    mispricing or revenue impact without carrier pricing data and validation.
 
-If no verified hazard attribute is available, use geocode displacement after
-verification as a clearly labelled proxy for location change; do not present
-it as a measured hazard-category change.
+If flood-zone information is unavailable, report the coarse-versus-verified
+geocode displacement as a clearly labelled proxy for location change; do not
+present it as a measured hazard-category change.
 
 Show formulas, source/value/type for each input, a conservative range or
 sensitivity table, and the difference between:
@@ -637,8 +648,8 @@ understood.
 | 0. Plan and access discovery | Approve this plan; inspect official Precisely docs/account, candidate enrichment products, trial credits, LLM terms, and repository visibility constraints. | Owner plan review; account access. | API verification checklist completed or blockers recorded; no speculative API calls; visibility approval remains separate. |
 | 1. Minimal foundation | Add project setup, canonical contracts, configuration, safe logging, and reproducible local command. | Phase 0; approved module scope. | Clean local setup; secrets excluded; offline tests run. |
 | 2. Synthetic data and baseline | Generate 200–500 seeded records, controls and documented noise; define metrics. | Phase 1. | All required defect categories present; dirty percentage/count documented; tests confirm generator and baseline. |
-| 3. Precisely address and geocoding | Implement verified API adapters, bounded safe handling, standardization, geocoding, and PreciselyID mapping only if documented/returned. | Verified US API/products/account access; credit estimate and owner approval. | Small live smoke test passes within budget; output provenance/status correct; full 200-record run is credit-feasible or blocker disclosed; comparison subset credit estimate includes raw-versus-verified enrichment where supported. |
-| 4. Enrichment | Select and implement 3–5 verified attributes for eligible records; compare raw versus verified location enrichment on a subset when the selected hazard attribute is available. | US product access, semantics, terms, credits, Phase 3 data, and comparison-subset size set after Phase 0. | Each field has documented definition/source; partial/missing data is represented honestly; eligible-row coverage and raw-versus-verified hazard-category changes (or labelled geocode-displacement proxy) are reported. |
+| 3. Precisely address and geocoding | Implement verified API adapters, bounded safe handling, standardization, geocoding, and PreciselyID mapping only if documented/returned. | Verified US API/products/account access; credit estimate and owner approval. | Small live smoke test passes within budget; output provenance/status correct; full 200-record run is credit-feasible or blocker disclosed; coarse-versus-verified comparison subset is budgeted. |
+| 4. Enrichment | Select and implement 3–5 verified attributes for eligible records; compare coarse Basic and verified Premium location enrichment on a subset when flood-zone information is available. | US product access, semantics, terms, credits, Phase 3 data, and comparison-subset size set after Phase 0. | Each field has documented definition/source; partial/missing data is represented honestly; eligible-row coverage and coarse-versus-verified flood-zone changes (or labelled geocode-displacement proxy) are reported. |
 | 5. Focused AI workflow | Implement evidence-grounded narrative with selected free-tier/local option and safety tests. | Enrichment result shape; chosen provider/privacy review. | Tested output and abstention; factual claims tied to input fields; no unsupported decisions. |
 | 6. Reporting and impact | Produce before/after detail/summary and the mandatory `docs/BUSINESS_IMPACT.md` summary, with optional PDF export. | Real run artifacts or clearly labelled fallback; metric definitions and transparent financial inputs. | Required metrics and outputs present; two cost/revenue risks quantified; solution mitigation and AI's incremental value explained; assumptions separated from measurements; one-page summary is clear to a non-technical executive. |
 | 7. Final validation and submission | Re-run from clean setup; review artifacts/secrets; verify reviewer-facing documents and required outputs. | Phases 1–6. | README/run steps reproduce output; tests and integration results reported accurately; mandatory artifacts included; visibility approval remains separate. |
@@ -648,6 +659,19 @@ file, are not submitted. Reviewer-facing documents are `README.md`,
 `docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The public repository
 must present a clean history; decide the approach in Phase 7, without
 rewriting history or publishing before explicit approval.
+
+**Phase 7 Data licensing:**
+
+- Do not publish row-level Precisely API outputs (coordinates, flood zones,
+  property attributes, PreciselyIDs) in the public repository, per Precisely
+  APIs Acceptable Use Policy (April 2021) §4.1 (no public display) and §4.2
+  (temporary storage only, maximum 30 days).
+- Public repository contents are code, the synthetic input CSV (“before”),
+  aggregate before/after summary CSV, output schema with clearly labelled
+  made-up example rows, and a README “Data licensing” section citing §4.1–4.2.
+- Share row-level output privately with the review team at submission, with a
+  one-line policy note.
+- Delete local raw API outputs and caches within 30 days of retrieval.
 
 ### Quality objectives
 
@@ -674,7 +698,7 @@ Deadline: Nov 6. Target submission: Nov 4. Nov 5 is reserved as a buffer.
 | Oct 29 | Phase 2: synthetic data and baseline. |
 | Oct 30 | Phase 3: smoke test, only after the owner approves the credit estimate. |
 | Oct 31 | Phase 3: full run, within the approved credit budget. |
-| Nov 1 | Phase 4: enrichment and raw-versus-verified comparison. |
+| Nov 1 | Phase 4: enrichment and coarse-versus-verified comparison. |
 | Nov 2 | Phase 5: focused AI workflow. |
 | Nov 3 | Phase 6: reporting and business impact summary. |
 | Nov 4 | Phase 7: final validation and target submission. |
@@ -727,8 +751,10 @@ verification to preserve the target dates.
   account details are committed.
 - [ ] Reproducible synthetic CSV contains 200–500 records; defect injection
   types, counts, dirty percentage, and seed are documented.
-- [ ] Verified Precisely address verification/standardization and geocoding
-  results are included, or unmet live API access is prominently disclosed.
+- [ ] Geocode Premium verification/standardization and geocoding results are
+  included, or unmet live API access is prominently disclosed. Address
+  Verification is not used in the full run because Status F “Address Not
+  Found” on defective input was still charged.
 - [ ] PreciselyID is included only if genuinely supported and returned.
 - [ ] Three to five verified enrichment attributes are included for eligible
   records, or any inability to meet the requirement is explicitly disclosed.
@@ -744,6 +770,17 @@ verification to preserve the target dates.
   with optional PDF export.
 - [ ] Setup and offline tests run from documented instructions; actual test
   and live integration results are accurately reported.
+- [ ] Data licensing: no row-level Precisely API outputs (coordinates, flood
+  zones, property attributes, PreciselyIDs) are published publicly, per
+  Precisely APIs Acceptable Use Policy (April 2021) §4.1 (no public display)
+  and §4.2 (temporary storage only, maximum 30 days).
+- [ ] Data licensing: public repository includes code, synthetic input CSV
+  (“before”), aggregate before/after summary CSV, output schema with clearly
+  labelled made-up example rows, and a README “Data licensing” section citing
+  §4.1–4.2.
+- [ ] Data licensing: row-level output is shared privately with the review
+  team at submission with a one-line policy note; local raw API outputs and
+  caches are deleted within 30 days of retrieval.
 - [ ] Submission hygiene: internal planning documents, including
   `docs/PROJECT_PLAN.md`, are not submitted. Reviewer-facing documents are
   `README.md`, `docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The
