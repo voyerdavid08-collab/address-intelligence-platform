@@ -89,6 +89,10 @@ This determines how the raw-vs-verified comparison (PROJECT_PLAN.md Sections
 - **Owner-approved 2026-10-28** — Risk 2 comparison subset is approximately
   40 records. Exact counterfactual method is TBD after smoke test. Budget
   comparison calls at 6 credits per record.
+- **Owner-approved 2026-10-28** — Hard credit cap 2,150 (reserve floor ≈14%,
+  350 credits) instead of 20%, because failed calls are not charged and
+  successful results will be cached. Ledger must be reconciled with the portal
+  dashboard before each live run.
 
 ## Smoke test plan
 
@@ -119,8 +123,8 @@ the normal verified-location pass; the comparison term is
 | `S` | Raw-vs-verified enrichment comparison subset size | 40 |
 | `C_SMOKE` | Smoke-test allowance in credits | 100 |
 | `C_RERUN` | Re-run allowance in credits | 0 (cached; failed calls free) |
-| `C_RESERVE` | Reserve: `0.20 × B` | 500 |
-| `C_AVAILABLE` | Spendable balance: `B − C_RESERVE` | 2,000 |
+| `C_RESERVE` | Reserve floor: `B − C_AVAILABLE` | 350 |
+| `C_AVAILABLE` | Approved hard credit cap / spendable limit; reserve floor is `B − C_AVAILABLE` | 2,150 |
 
 **Estimated total formula**
 
@@ -130,13 +134,13 @@ For eligibility rate `E`:
 
 | Case | Calculation | Total | Spendable balance | Remaining balance | Resulting reserve (% of `B`) | Within spendable balance? |
 |---|---|---:|---:|---:|---:|---|
-| Best case: 200 records, 85% eligible (`E = 0.85`) | `200 × (0 + 1 + 0.01) + (200 × 0.85 × 8.01) + 40 × (1 + 5) + 100 + 0` | 1,903.70 | 2,000 | 596.30 | 23.85% | Yes; 96.30 credits below spendable limit |
-| Worst case: 200 records, 100% eligible (`E = 1.00`) | `200 × (0 + 1 + 0.01) + (200 × 1.00 × 8.01) + 40 × (1 + 5) + 100 + 0` | 2,144.00 | 2,000 | 356.00 | 14.24% | No; exceeds spendable limit by 144.00 credits |
+| Best case: 200 records, 85% eligible (`E = 0.85`) | `200 × (0 + 1 + 0.01) + (200 × 0.85 × 8.01) + 40 × (1 + 5) + 100 + 0` | 1,903.70 | 2,150 | 596.30 | 23.85% | Yes; 246.30 credits below hard cap |
+| Worst case: 200 records, 100% eligible (`E = 1.00`) | `200 × (0 + 1 + 0.01) + (200 × 1.00 × 8.01) + 40 × (1 + 5) + 100 + 0` | 2,144.00 | 2,150 | 356.00 | 14.24% | Yes; 6.00 credits below hard cap |
 
 The reserve percentage is remaining balance divided by starting balance.
-The worst case falls below the approved 20% reserve and is not within budget;
-reduce full-run eligible enrichment volume or comparison-subset size only
-after owner review, and do not proceed above the spendable limit.
+The approximate reserve floor is 350 credits (14% of the starting balance);
+the worst case leaves 356 credits. Reconcile the ledger with the portal
+dashboard before each live run.
 
 ## 6. Enrichment candidate scoring
 
