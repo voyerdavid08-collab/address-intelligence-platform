@@ -422,6 +422,8 @@ class StagedPipeline:
         self, row: dict[str, str], geocode_data: Any
     ) -> PlannedRequest:
         base = _row_from_geocode(row["policy_id"], geocode_data)
+        if not base["standardized_address_line1"].strip():
+            raise ValueError("Cannot create PreciselyID request: missing standardized street.")
         address = _std_address(base)
         return PlannedRequest(
             row["policy_id"],
@@ -481,6 +483,8 @@ class StagedPipeline:
         self, row: dict[str, str], geocode_data: Any
     ) -> PlannedRequest:
         base = _row_from_geocode(row["policy_id"], geocode_data)
+        if not base["standardized_address_line1"].strip():
+            raise ValueError("Cannot create property request: missing standardized street.")
         address = _std_address(base)
         return PlannedRequest(
             row["policy_id"],
@@ -550,19 +554,29 @@ class StagedPipeline:
             ]
         elif stage == "preciselyid":
             for row, geocode in self._eligible_records(rows):
-                requests.append(self._preciselyid_request(row, geocode.data))
+                base = _row_from_geocode(row["policy_id"], geocode.data)
+                if base["standardized_address_line1"].strip():
+                    requests.append(self._preciselyid_request(row, geocode.data))
         elif stage == "enrich":
             for row, geocode in self._eligible_records(rows):
                 candidate = _candidate(geocode.data)
                 point = _coordinates(candidate)
                 if point is None:
                     continue
+                base = _row_from_geocode(row["policy_id"], geocode.data)
+                property_request = (
+                    self._property_request(row, geocode.data)
+                    if base["standardized_address_line1"].strip()
+                    else None
+                )
+                enrich_requests = [
+                    self._flood_request(row, point),
+                    self._distance_request(row, point),
+                ]
+                if property_request is not None:
+                    enrich_requests.append(property_request)
                 requests.extend(
-                    (
-                        self._flood_request(row, point),
-                        self._distance_request(row, point),
-                        self._property_request(row, geocode.data),
-                    )
+                    enrich_requests
                 )
         else:
             selected = self._compare_sample(self._eligible_records(rows))
@@ -659,7 +673,7 @@ class StagedPipeline:
         selected_rows = rows[:limit] if limit is not None else rows
         before = self.ledger.cumulative_spent
         requests = self.plan(stage, limit=limit)
-        if stage != "geocode" and not requests:
+        if stage != "geocode" and not requests and not self._eligible_records(selected_rows):
             raise ValueError(
                 f"No eligible cached Geocode Premium results are available for {stage}; "
                 "run geocode first."
@@ -734,29 +748,42 @@ class StagedPipeline:
                 result["geocode_provenance"] = ""
             eligible = result["eligibility"] == "eligible"
             if eligible and geocode is not None:
-                preciselyid_request = self._preciselyid_request(policy, geocode.data)
-                preciselyid = self._response_for(preciselyid_request)
-                if preciselyid is not None:
-                    result["preciselyid"] = str(
-                        _nested(preciselyid.data, "key")
-                        or _nested(preciselyid.data, "preciselyId")
-                        or _nested(preciselyid.data, "preciselyID")
-                        or ""
+                has_standardized_street = bool(
+                    result["standardized_address_line1"].strip()
+                )
+                if has_standardized_street:
+                    preciselyid_request = self._preciselyid_request(
+                        policy, geocode.data
                     )
-                    result["preciselyid_status"] = (
-                        "failed" if preciselyid.status_code != 200 else "api"
-                    )
-                    result["preciselyid_provenance"] = self._run_provenance.get(
-                        ("preciselyid_by_address", policy["policy_id"]), "cached"
-                    )
+                    preciselyid = self._response_for(preciselyid_request)
+                    if preciselyid is not None:
+                        result["preciselyid"] = str(
+                            _nested(preciselyid.data, "key")
+                            or _nested(preciselyid.data, "preciselyId")
+                            or _nested(preciselyid.data, "preciselyID")
+                            or ""
+                        )
+                        result["preciselyid_status"] = (
+                            "failed" if preciselyid.status_code != 200 else "api"
+                        )
+                        result["preciselyid_provenance"] = self._run_provenance.get(
+                            ("preciselyid_by_address", policy["policy_id"]), "cached"
+                        )
+                else:
+                    result["preciselyid_status"] = "failed: missing standardized street"
+                    result["preciselyid_provenance"] = "failed"
                 point = _coordinates(_candidate(geocode.data))
                 if point is not None:
                     flood_request = self._flood_request(policy, point)
                     flood = self._response_for(flood_request)
                     distance_request = self._distance_request(policy, point)
                     distance = self._response_for(distance_request)
-                    property_request = self._property_request(policy, geocode.data)
-                    property_response = self._response_for(property_request)
+                    property_response = None
+                    if has_standardized_street:
+                        property_request = self._property_request(
+                            policy, geocode.data
+                        )
+                        property_response = self._response_for(property_request)
                     if flood:
                         _apply_flood(result, flood.data)
                     if distance:
@@ -768,6 +795,10 @@ class StagedPipeline:
                         )
                     enrich_responses = (flood, distance, property_response)
                     result["enrich_status"] = _aggregate_status(enrich_responses)
+                    if not has_standardized_street:
+                        result["enrich_status"] = (
+                            "failed: missing standardized street"
+                        )
                     result["enrich_provenance"] = _aggregate_provenance(
                         self._run_provenance,
                         (
@@ -777,6 +808,8 @@ class StagedPipeline:
                         ),
                         enrich_responses,
                     )
+                    if not has_standardized_street:
+                        result["enrich_provenance"] = "failed"
                 else:
                     result["enrich_status"] = "failed"
                     result["enrich_provenance"] = "failed"
@@ -958,16 +991,19 @@ def _apply_geocode(result: dict[str, str], response: ProviderResponse) -> None:
         return
     result["precision_code"] = str(candidate.get("precisionCode") or "")
     address = candidate.get("address")
+    line1 = (
+        address.get("mainAddressLine")
+        if isinstance(address, dict)
+        else None
+    ) or candidate.get("formattedStreetAddress")
+    if line1 is not None:
+        result["standardized_address_line1"] = str(line1)
     if isinstance(address, dict):
         mappings = {
-            "standardized_address_line2": ("addressLine2",),
             "standardized_city": ("areaName3",),
             "standardized_state": ("areaName1",),
             "standardized_zip5": ("postCode1",),
         }
-        line1 = address.get("mainAddress") or address.get("addressLine1")
-        if line1 is not None:
-            result["standardized_address_line1"] = str(line1)
         for destination, sources in mappings.items():
             value = next((address.get(source) for source in sources if address.get(source)), None)
             if value is not None:

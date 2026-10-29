@@ -54,9 +54,9 @@ def _geocode_data(
         "candidates": [
             {
                 "precisionCode": code,
+                "formattedStreetAddress": line1,
                 "address": {
-                    "addressLine1": line1,
-                    "addressLine2": line2,
+                    "mainAddressLine": line1,
                     "areaName3": city,
                     "areaName1": state,
                     "postCode1": zip5,
@@ -243,6 +243,82 @@ def test_standardized_address_used_for_preciselyid_and_property(tmp_path, capsys
     assert result["built_year"] == "1980"
     assert result["flood_zone_code"] == "X"
     assert result["distance_to_water"] == "2.5"
+
+
+def test_real_response_shape_contract_maps_street_and_request_addresses(tmp_path):
+    fixture_path = (
+        Path(__file__).parents[1]
+        / "fixtures"
+        / "geocode_premium_response_shape.json"
+    )
+    geocode_data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    pipeline, _ = _pipeline(tmp_path, [_row()])
+    from address_intelligence.pipeline import _apply_geocode, _empty_result
+
+    mapped = _empty_result("POL-000001")
+    _apply_geocode(mapped, _response(geocode_data))
+
+    assert mapped["standardized_address_line1"] == "100 EXAMPLE ST"
+    assert mapped["standardized_city"] == "SAMPLE CITY"
+    assert mapped["standardized_state"] == "ZZ"
+    assert mapped["standardized_zip5"] == "00000"
+    row = _row()
+    preciselyid = pipeline._preciselyid_request(row, geocode_data)
+    property_request = pipeline._property_request(row, geocode_data)
+    assert preciselyid.params["address"] == (
+        "100 EXAMPLE ST, SAMPLE CITY, ZZ 00000"
+    )
+    assert property_request.params["address"] == (
+        "100 EXAMPLE ST, SAMPLE CITY, ZZ 00000"
+    )
+
+
+def test_formatted_street_address_is_fallback(tmp_path):
+    fixture_path = (
+        Path(__file__).parents[1]
+        / "fixtures"
+        / "geocode_premium_response_shape.json"
+    )
+    geocode_data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    del geocode_data["candidates"][0]["address"]["mainAddressLine"]
+    from address_intelligence.pipeline import _apply_geocode, _empty_result
+
+    mapped = _empty_result("POL-000001")
+    _apply_geocode(mapped, _response(geocode_data))
+
+    assert mapped["standardized_address_line1"] == "100 EXAMPLE ST"
+
+
+def test_missing_standardized_street_prevents_preciselyid_and_property(
+    tmp_path, capsys
+):
+    data = _geocode_data(line1="", city="SAMPLE CITY", state="ZZ", zip5="00000")
+    data["candidates"][0]["formattedStreetAddress"] = ""
+    row = _row()
+    pipeline, client = _pipeline(tmp_path, [row])
+    geocode_request = pipeline._geocode_request(row, tier="premium")
+    pipeline._write_cache(
+        geocode_request,
+        _response(data),
+    )
+
+    preciselyid_plan = pipeline.plan("preciselyid")
+    enrich_plan = pipeline.plan("enrich")
+    assert all(request.operation != "preciselyid_by_address" for request in preciselyid_plan)
+    assert all(request.operation != "property_attributes_v2" for request in enrich_plan)
+
+    before = pipeline.ledger.cumulative_spent
+    pipeline.run_stage("preciselyid")
+    capsys.readouterr()
+
+    assert all(
+        operation not in {"preciselyid_by_address", "property_attributes_v2"}
+        for operation, _ in client.calls
+    )
+    assert pipeline.ledger.cumulative_spent == before
+    with pipeline.results_path.open(newline="", encoding="utf-8") as source:
+        result_row = next(csv.DictReader(source))
+    assert result_row["preciselyid_status"] == "failed: missing standardized street"
 
 
 def test_cache_hit_skips_call_and_credit(tmp_path, capsys):
