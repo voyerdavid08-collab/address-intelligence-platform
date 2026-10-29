@@ -14,8 +14,10 @@ from address_intelligence.narrative import (
     MAX_COMPLETION_TOKENS,
     NarrativeGenerator,
     NarrativeGuardrailError,
+    _append_missing_disclosure,
     _request_messages,
     build_evidence,
+    compute_not_available,
     validate_model_result,
 )
 
@@ -86,13 +88,12 @@ def _valid_content():
     return json.dumps(
         {
             "narrative": "The flood zone is X and the reported risk is Minimal. "
-            "Distance to water is 0.512 MILES.",
+            "Distance to water is 0.512 miles.",
             "evidence_fields_used": [
                 "flood_zone_base",
                 "flood_risk_level",
                 "distance_to_water",
             ],
-            "missing_evidence": ["built_year"],
         }
     )
 
@@ -102,6 +103,7 @@ class _Response:
 
     def json(self):
         return {
+            "model": "openai/gpt-oss-120b",
             "choices": [{"message": {"content": _valid_content()}}],
             "usage": {"total_tokens": 23},
         }
@@ -133,7 +135,7 @@ def test_evidence_allowlist_excludes_private_and_non_allowlisted_fields():
     evidence = build_evidence(_eligible_row(), _policy())
 
     assert set(evidence).issubset(EVIDENCE_FIELDS)
-    assert evidence["match_quality"] == "building-level"
+    assert evidence["match_quality"] == "location verified to an exact address point"
     assert evidence["flood_zone_base"] == "X"
     assert "policy_id" not in evidence
     assert not any(
@@ -143,6 +145,64 @@ def test_evidence_allowlist_excludes_private_and_non_allowlisted_fields():
     serialized_prompt = json.dumps(_request_messages(evidence)).casefold()
     assert "not-sent" not in serialized_prompt
     assert "00000" not in serialized_prompt
+    assert (
+        "location verified to an exact address point" in serialized_prompt
+    )
+    assert "not_available" not in serialized_prompt
+    assert "do not mention information that is not supplied" in serialized_prompt
+    assert "write 2" in serialized_prompt
+    assert "plain-english sentences for an underwriter" in serialized_prompt
+    assert "you may combine related facts" in serialized_prompt
+    assert "never imply that one field causes or determines another" in serialized_prompt
+
+
+def test_missing_evidence_is_computed_with_bfe_risk_tier_rule():
+    minimal = build_evidence(
+        _eligible_row(flood_zone_code="X", distance_to_water="0.5"),
+        _policy(),
+    )
+    high = build_evidence(
+        _eligible_row(flood_zone_code="AE0008", distance_to_water="0.5"),
+        _policy(),
+    )
+    high_with_bfe = build_evidence(
+        _eligible_row(
+            flood_zone_code="AE0008",
+            bfe="13",
+            bfe_unit="feet",
+            distance_to_water="0.5",
+        ),
+        _policy(),
+    )
+
+    assert compute_not_available(minimal) == ["built_year"]
+    assert compute_not_available(high) == [
+        "built_year",
+        "base_flood_elevation",
+    ]
+    assert compute_not_available(high_with_bfe) == ["built_year"]
+
+
+def test_cleaning_and_plain_language_match_quality():
+    result = _eligible_row(
+        precision_code="S7",
+        flood_zone_code="AE0013",
+        bfe="0013",
+        bfe_unit="FEET",
+        distance_to_water="000.512",
+        distance_to_water_unit="MILES",
+        built_year="0013",
+    )
+
+    evidence = build_evidence(result, _policy())
+
+    assert evidence["match_quality"] == (
+        "location estimated along the street "
+        "(house number not confirmed as a known address point)"
+    )
+    assert evidence["base_flood_elevation"] == "13 feet"
+    assert evidence["distance_to_water"] == "0.512 miles"
+    assert evidence["built_year"] == "13"
 
 
 def test_manual_template_and_abstention_do_not_call_model(tmp_path):
@@ -173,8 +233,11 @@ def test_manual_template_and_abstention_do_not_call_model(tmp_path):
     assert calls == []
     assert summary["template"] == 1
     assert summary["abstained"] == 1
-    assert "location conflict (state mismatch)" in output[0]["narrative"]
-    assert "Enrichment was withheld pending address remediation." in output[0]["narrative"]
+    assert output[0]["narrative"] == (
+        "The location could not be verified to building level (reason: the "
+        "standardized state differed from the input state). Flood enrichment "
+        "was withheld pending address remediation."
+    )
 
 
 def test_guardrails_reject_malformed_json_wrong_keys_and_unsupported_fields():
@@ -213,7 +276,6 @@ def test_guardrails_reject_each_banned_term(banned):
         {
             "narrative": f"The {banned} is unsupported. No further action is indicated.",
             "evidence_fields_used": [],
-            "missing_evidence": [],
         }
     )
     with pytest.raises(NarrativeGuardrailError, match="banned term"):
@@ -226,7 +288,6 @@ def test_guardrails_reject_ungrounded_numbers_and_overlong_narrative():
         {
             "narrative": "The zone is X and risk is Minimal. The value is 2030.",
             "evidence_fields_used": ["flood_zone_base", "flood_risk_level"],
-            "missing_evidence": [],
         }
     )
     with pytest.raises(NarrativeGuardrailError, match="unsupported number"):
@@ -235,11 +296,29 @@ def test_guardrails_reject_ungrounded_numbers_and_overlong_narrative():
         {
             "narrative": ("A" * 601) + ". B.",
             "evidence_fields_used": [],
-            "missing_evidence": [],
         }
     )
     with pytest.raises(NarrativeGuardrailError, match="600 characters"):
         validate_model_result(too_long, evidence)
+
+
+def test_sentence_guardrail_accepts_four_and_rejects_one_or_five():
+    evidence = {"flood_zone_base": "X"}
+
+    def content(sentence_count):
+        return json.dumps(
+            {
+                "narrative": " ".join(
+                    "The flood zone is X." for _ in range(sentence_count)
+                ),
+                "evidence_fields_used": ["flood_zone_base"],
+            }
+        )
+
+    validate_model_result(content(4), evidence)
+    for count in (1, 5):
+        with pytest.raises(NarrativeGuardrailError, match="2 to 4 sentences"):
+            validate_model_result(content(count), evidence)
 
 
 def test_model_response_cache_hit_makes_no_second_call(tmp_path):
@@ -276,6 +355,16 @@ def test_model_response_cache_hit_makes_no_second_call(tmp_path):
     assert output["status"] == "generated"
     assert output["tokens"] == 23
     assert json.loads((tmp_path / "daily.json").read_text())["tokens"] == 23
+    assert output["model"] == "openai/gpt-oss-120b"
+    assert output["model_reported"] == "openai/gpt-oss-120b"
+    assert output["missing_evidence"] == ["built_year"]
+    assert output["narrative_model"] == (
+        "The flood zone is X and the reported risk is Minimal. "
+        "Distance to water is 0.512 miles."
+    )
+    assert output["narrative"] == (
+        output["narrative_model"] + " Not available: year built."
+    )
     counts = NarrativeGenerator(**arguments).dry_run()
     assert counts["cached"] == 1
     assert counts["model"] == 0
@@ -348,6 +437,115 @@ def test_secret_is_not_in_settings_repr_or_request_exception(tmp_path):
     assert "groq-test-secret" not in output
 
 
+def test_failed_call_records_only_safe_status_and_error_identifiers(tmp_path):
+    results_path, policies_path = _paths(tmp_path, [_eligible_row()], [_policy()])
+
+    class ErrorResponse:
+        status_code = 400
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "json_validate_failed",
+                    "message": "sensitive request and groq-test-secret",
+                }
+            }
+
+    generator = NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=tmp_path / "narratives.jsonl",
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=lambda *args, **kwargs: ErrorResponse(),
+    )
+
+    summary = generator.execute()
+    output = json.loads((tmp_path / "narratives.jsonl").read_text().splitlines()[0])
+
+    assert summary["failed"] == 1
+    assert output["status"] == "failed"
+    assert output["guardrail_reason"] == (
+        "HTTP 400 invalid_request_error/json_validate_failed"
+    )
+    assert "sensitive" not in output["guardrail_reason"]
+    assert "groq-test-secret" not in output["guardrail_reason"]
+
+
+def test_429_retries_once_and_honors_retry_after(tmp_path):
+    results_path, policies_path = _paths(tmp_path, [_eligible_row()], [_policy()])
+    calls = []
+    delays = []
+
+    class RateLimitResponse:
+        status_code = 429
+        headers = {"Retry-After": "2"}
+
+        @staticmethod
+        def json():
+            return {"error": {"type": "rate_limit", "code": "rate_limit_exceeded"}}
+
+    responses = [RateLimitResponse(), _Response()]
+
+    def post(*args, **kwargs):
+        calls.append(args)
+        return responses.pop(0)
+
+    generator = NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=tmp_path / "narratives.jsonl",
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=post,
+        sleeper=delays.append,
+    )
+
+    summary = generator.execute()
+
+    assert summary["generated"] == 1
+    assert len(calls) == 2
+    assert delays == [2.0]
+
+
+def test_400_is_not_retried(tmp_path):
+    results_path, policies_path = _paths(tmp_path, [_eligible_row()], [_policy()])
+    calls = []
+
+    class BadRequestResponse:
+        status_code = 400
+        headers = {"Retry-After": "0"}
+
+        @staticmethod
+        def json():
+            return {"error": {"code": "json_validate_failed"}}
+
+    def post(*args, **kwargs):
+        calls.append(args)
+        return BadRequestResponse()
+
+    generator = NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=tmp_path / "narratives.jsonl",
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=post,
+        sleeper=lambda delay: pytest.fail("400 response must not be retried"),
+    )
+
+    summary = generator.execute()
+
+    assert summary["failed"] == 1
+    assert len(calls) == 1
+
+
 def test_dry_run_counts_routes_without_calling_transport(tmp_path):
     rows = [
         _eligible_row("POL-000001", eligibility="manual_review"),
@@ -373,20 +571,141 @@ def test_dry_run_counts_routes_without_calling_transport(tmp_path):
     assert calls == []
 
 
-def test_missing_evidence_only_accepts_allowlisted_names():
+def test_evidence_fields_used_rejects_unavailable_names():
+    evidence = {"flood_zone_base": "AE", "flood_risk_level": "High"}
+    content = json.dumps({
+        "narrative": "The flood zone is AE and the reported risk is High. "
+        "The reported location is in the metro area.",
+        "evidence_fields_used": [
+            "flood_zone_base",
+            "flood_risk_level",
+        ],
+    })
+    assert "missing_evidence" not in validate_model_result(
+        content, evidence, ["built_year", "base_flood_elevation"]
+    )
+
+    invented = json.loads(content)
+    invented["evidence_fields_used"].append("built_year")
+    with pytest.raises(
+        NarrativeGuardrailError, match="unsupplied field"
+    ):
+        validate_model_result(
+            json.dumps(invented),
+            evidence,
+            ["built_year", "base_flood_elevation"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "phrase"),
+    [
+        ("built_year", "year built"),
+        ("built_year", "built year"),
+        ("built_year", "constructed"),
+        ("built_year", "construction year"),
+        ("base_flood_elevation", "base flood elevation"),
+        ("distance_to_water", "distance to water"),
+    ],
+)
+def test_model_narrative_cannot_mention_unavailable_fields(field, phrase):
     evidence = {"flood_zone_base": "X", "flood_risk_level": "Minimal"}
     content = json.dumps(
         {
-            "narrative": "The flood zone is X and risk is Minimal. No year built was supplied.",
+            "narrative": f"The flood zone is X. The reported {phrase} is absent.",
             "evidence_fields_used": ["flood_zone_base", "flood_risk_level"],
-            "missing_evidence": ["built_year"],
         }
     )
-    assert validate_model_result(content, evidence)["missing_evidence"] == ["built_year"]
-    result = json.loads(content)
-    result["missing_evidence"] = ["policy_id"]
-    with pytest.raises(NarrativeGuardrailError, match="unknown field"):
-        validate_model_result(json.dumps(result), evidence)
-    result["missing_evidence"] = ["flood_zone_base"]
-    with pytest.raises(NarrativeGuardrailError, match="supplied field"):
-        validate_model_result(json.dumps(result), evidence)
+    with pytest.raises(NarrativeGuardrailError, match="mentions unavailable field"):
+        validate_model_result(content, evidence, [field])
+
+
+def test_model_text_is_normalized_to_ascii_before_guardrails():
+    evidence = {"flood_zone_base": "X", "flood_risk_level": "Minimal"}
+    content = json.dumps(
+        {
+            "narrative": "The flood zone is X\u2011LOMR. \u201cRisk\u201d is Minimal. "
+            "No additional facts\u2014were provided.",
+            "evidence_fields_used": ["flood_zone_base", "flood_risk_level"],
+        }
+    )
+    result = validate_model_result(content, evidence)
+    assert "\u2011" not in result["narrative"]
+    assert "\u201c" not in result["narrative"]
+    assert "\u201d" not in result["narrative"]
+    assert "\u2014" not in result["narrative"]
+    assert result["narrative"] == (
+        'The flood zone is X-LOMR. "Risk" is Minimal. No additional facts-were provided.'
+    )
+
+
+def test_missing_disclosure_uses_readable_names():
+    narrative_model = "The flood zone is AE. The reported risk is High."
+
+    assert _append_missing_disclosure(
+        narrative_model, ["built_year", "base_flood_elevation"]
+    ) == (
+        "The flood zone is AE. The reported risk is High. "
+        "Not available: year built and base flood elevation."
+    )
+    assert _append_missing_disclosure(narrative_model, []) == narrative_model
+
+
+def test_prompt_instructs_separate_facts_without_causal_implications():
+    prompt = "\n".join(
+        message["content"]
+        for message in _request_messages({"flood_zone_base": "AE"})
+    )
+    assert "Write 2\u20133 plain-English sentences for an underwriter." in prompt
+    assert "You may combine related facts in one sentence" in prompt
+    assert "never imply that one field causes or determines another." in prompt
+    assert "not_available" not in prompt
+    assert "do not mention information that is not supplied" in prompt
+
+
+def test_model_response_missing_evidence_schema_does_not_include_code_field(tmp_path):
+    results_path, policies_path = _paths(tmp_path, [_eligible_row()], [_policy()])
+    calls = []
+
+    def post(url, *, headers, json, timeout):
+        calls.append(json)
+        return _Response()
+
+    NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=tmp_path / "narratives.jsonl",
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=post,
+    ).execute()
+
+    schema = calls[0]["response_format"]["json_schema"]["schema"]
+    assert set(schema["properties"]) == {"narrative", "evidence_fields_used"}
+    assert "missing_evidence" not in schema["required"]
+
+
+def test_different_reported_model_is_stored_and_warned(tmp_path):
+    results_path, policies_path = _paths(tmp_path, [_eligible_row()], [_policy()])
+
+    class DifferentModelResponse(_Response):
+        def json(self):
+            body = super().json()
+            body["model"] = "openai/gpt-oss-20b"
+            return body
+
+    generator = NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=tmp_path / "narratives.jsonl",
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=lambda *args, **kwargs: DifferentModelResponse(),
+    )
+    with pytest.warns(RuntimeWarning, match="differs"):
+        generator.execute()
+    output = json.loads((tmp_path / "narratives.jsonl").read_text().splitlines()[0])
+    assert output["model"] == "openai/gpt-oss-120b"
+    assert output["model_reported"] == "openai/gpt-oss-20b"

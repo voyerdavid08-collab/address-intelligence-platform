@@ -4,6 +4,7 @@ import csv
 from collections import deque
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from email.utils import parsedate_to_datetime
 import hashlib
 import json
 import math
@@ -11,11 +12,12 @@ from pathlib import Path
 import re
 import time
 from typing import Any, Callable
+import warnings
 
 import requests
 
 from address_intelligence.config import Settings
-from address_intelligence.flood import flood_zone_base
+from address_intelligence.flood import flood_zone_base, risk_tier
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +28,7 @@ NARRATIVES_PATH = RUN_ROOT / "narratives.jsonl"
 CACHE_ROOT = RUN_ROOT / "cache" / "narratives"
 DAILY_USAGE_PATH = CACHE_ROOT / "daily_usage.json"
 GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
-PROMPT_VERSION = "underwriting-flood-context-v1"
+PROMPT_VERSION = "underwriting-flood-context-v5"
 MAX_REQUESTS_PER_MINUTE = 30
 MAX_TOKENS_PER_MINUTE = 8000
 MAX_COMPLETION_TOKENS = 512
@@ -45,8 +47,12 @@ EVIDENCE_FIELDS = (
 REQUIRED_RESPONSE_KEYS = {
     "narrative",
     "evidence_fields_used",
-    "missing_evidence",
 }
+OPTIONAL_EVIDENCE_FIELDS = (
+    "built_year",
+    "base_flood_elevation",
+    "distance_to_water",
+)
 _BANNED_TERMS = (
     "premium",
     "price",
@@ -64,10 +70,44 @@ _BANNED_TERMS = (
 )
 _NUMBER_PATTERN = re.compile(r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?")
 _SENTENCE_END_PATTERN = re.compile(r"[.!?](?:\s|$)")
+_ASCII_PUNCTUATION = str.maketrans(
+    {
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u201f": '"',
+        "\u00a0": " ",
+        "\u202f": " ",
+    }
+)
+_UNAVAILABLE_FIELD_PHRASES = {
+    "built_year": ("year built", "built year", "constructed", "construction year"),
+    "base_flood_elevation": ("base flood elevation",),
+    "distance_to_water": ("distance to water",),
+}
+_DISCLOSURE_NAMES = {
+    "built_year": "year built",
+    "base_flood_elevation": "base flood elevation",
+    "distance_to_water": "distance to water",
+}
 
 
 class NarrativeAPIError(RuntimeError):
     """Raised when a Groq response cannot be safely consumed."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class NarrativeGuardrailError(ValueError):
@@ -84,39 +124,53 @@ def _json_hash(value: Any) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _clean_numeric_string(value: str) -> str:
+    """Remove redundant leading zeros without changing decimal precision."""
+    pattern = re.compile(r"(?<![\w.])([+-]?)(\d+)(\.\d+)?")
+
+    def replace(match: re.Match[str]) -> str:
+        integer = match.group(2).lstrip("0") or "0"
+        return f"{match.group(1)}{integer}{match.group(3) or ''}"
+
+    return pattern.sub(replace, value.strip())
+
+
 def build_evidence(
     result: dict[str, str], policy: dict[str, str]
 ) -> dict[str, str]:
     """Build the only fields permitted in a model request."""
     precision = result.get("precision_code", "").upper()
     if precision.startswith("S8"):
-        match_quality = "building-level"
+        match_quality = "location verified to an exact address point"
     elif precision.startswith(("S5", "S7")):
-        match_quality = "street-interpolated"
+        match_quality = (
+            "location estimated along the street "
+            "(house number not confirmed as a known address point)"
+        )
     else:
         match_quality = ""
 
     flood_base = flood_zone_base(result.get("flood_zone_code"))
     evidence: dict[str, str] = {
-        "line_of_business": policy.get("line_of_business", ""),
-        "metro": policy.get("metro", ""),
+        "line_of_business": policy.get("line_of_business", "").strip(),
+        "metro": policy.get("metro", "").strip(),
         "match_quality": match_quality,
         "flood_zone_base": flood_base,
         "flood_risk_level": result.get("flood_risk_level", "").strip(),
     }
-    bfe = result.get("bfe", "").strip()
-    bfe_unit = result.get("bfe_unit", "").strip()
+    bfe = _clean_numeric_string(result.get("bfe", ""))
+    bfe_unit = result.get("bfe_unit", "").strip().lower()
     if bfe:
         evidence["base_flood_elevation"] = " ".join(
             part for part in (bfe, bfe_unit) if part
         )
-    distance = result.get("distance_to_water", "").strip()
-    distance_unit = result.get("distance_to_water_unit", "").strip()
+    distance = _clean_numeric_string(result.get("distance_to_water", ""))
+    distance_unit = result.get("distance_to_water_unit", "").strip().lower()
     if distance:
         evidence["distance_to_water"] = " ".join(
             part for part in (distance, distance_unit) if part
         )
-    built_year = result.get("built_year", "").strip()
+    built_year = _clean_numeric_string(result.get("built_year", ""))
     if built_year:
         evidence["built_year"] = built_year
     return {
@@ -126,7 +180,37 @@ def build_evidence(
     }
 
 
-def validate_model_result(content: str, evidence: dict[str, str]) -> dict[str, Any]:
+def compute_not_available(evidence: dict[str, str]) -> list[str]:
+    """Return absent optional evidence, applying the BFE risk-tier exception."""
+    not_available = [
+        field for field in OPTIONAL_EVIDENCE_FIELDS if not evidence.get(field)
+    ]
+    base = evidence.get("flood_zone_base", "")
+    if risk_tier(base) != "High":
+        not_available = [
+            field for field in not_available if field != "base_flood_elevation"
+        ]
+    return not_available
+
+
+def _append_missing_disclosure(
+    narrative_model: str, not_available: list[str]
+) -> str:
+    names = [_DISCLOSURE_NAMES[field] for field in not_available]
+    if not names:
+        return narrative_model
+    if len(names) == 1:
+        listing = names[0]
+    elif len(names) == 2:
+        listing = f"{names[0]} and {names[1]}"
+    else:
+        listing = f"{', '.join(names[:-1])}, and {names[-1]}"
+    return f"{narrative_model.rstrip()} Not available: {listing}."
+
+
+def validate_model_result(
+    content: str, evidence: dict[str, str], not_available: list[str] | None = None
+) -> dict[str, Any]:
     """Parse and validate the model's JSON against evidence and output constraints."""
     try:
         result = json.loads(content)
@@ -136,23 +220,26 @@ def validate_model_result(content: str, evidence: dict[str, str]) -> dict[str, A
         raise NarrativeGuardrailError("response must contain exactly the required keys")
     narrative = result["narrative"]
     used = result["evidence_fields_used"]
-    missing = result["missing_evidence"]
-    if not isinstance(narrative, str) or not isinstance(used, list) or not isinstance(missing, list):
+    if not isinstance(narrative, str) or not isinstance(used, list):
         raise NarrativeGuardrailError("response values have invalid types")
-    if not all(isinstance(item, str) for item in used + missing):
-        raise NarrativeGuardrailError("evidence lists must contain strings")
+    if not all(isinstance(item, str) for item in used):
+        raise NarrativeGuardrailError("evidence_fields_used must contain strings")
+    narrative = narrative.translate(_ASCII_PUNCTUATION)
+    result["narrative"] = narrative
     if not set(used).issubset(evidence):
-        raise NarrativeGuardrailError("evidence_fields_used includes an unsupplied field")
-    if not set(missing).issubset(EVIDENCE_FIELDS):
-        raise NarrativeGuardrailError("missing_evidence includes an unknown field")
-    if not set(missing).issubset(set(EVIDENCE_FIELDS) - set(evidence)):
-        raise NarrativeGuardrailError("missing_evidence includes a supplied field")
+        raise NarrativeGuardrailError(
+            "evidence_fields_used includes an unsupplied field"
+        )
+    lowered = narrative.casefold()
+    for field in not_available or []:
+        phrases = _UNAVAILABLE_FIELD_PHRASES.get(field, ())
+        if any(phrase in lowered for phrase in phrases):
+            raise NarrativeGuardrailError("mentions unavailable field")
     if len(narrative) > MAX_NARRATIVE_CHARS:
         raise NarrativeGuardrailError("narrative exceeds 600 characters")
     sentence_count = len(_SENTENCE_END_PATTERN.findall(narrative.strip()))
-    if sentence_count not in (2, 3):
-        raise NarrativeGuardrailError("narrative must contain 2 or 3 sentences")
-    lowered = narrative.casefold()
+    if sentence_count not in (2, 3, 4):
+        raise NarrativeGuardrailError("narrative must contain 2 to 4 sentences")
     for term in _BANNED_TERMS:
         if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", lowered):
             raise NarrativeGuardrailError(f"narrative contains banned term: {term}")
@@ -173,6 +260,29 @@ def _decimal_number(value: str) -> Decimal:
         return Decimal(value.replace(",", "")).normalize()
     except InvalidOperation:
         return Decimal("NaN")
+
+
+def _safe_http_error_reason(response: Any) -> str:
+    """Keep only status and allowlisted error identifiers from provider errors."""
+    reason = f"HTTP {response.status_code}"
+    try:
+        body = response.json()
+    except (ValueError, TypeError):
+        return reason
+    if not isinstance(body, dict):
+        return reason
+    error = body.get("error")
+    if not isinstance(error, dict):
+        return reason
+    identifiers = []
+    for key in ("type", "code"):
+        value = error.get(key)
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", value):
+            if value not in identifiers:
+                identifiers.append(value)
+    if identifiers:
+        reason += " " + "/".join(identifiers)
+    return reason
 
 
 def _load_daily_usage(path: Path, today: str) -> int:
@@ -196,18 +306,20 @@ def _token_estimate(messages: list[dict[str, str]]) -> int:
 
 def _request_messages(evidence: dict[str, str]) -> list[dict[str, str]]:
     system = (
-        "You are an underwriting-support assistant. Write 2-3 plain-English "
-        "sentences for an underwriter using only the supplied evidence fields. "
-        "State material missing evidence, such as a missing year built. Do not "
+        "You are an underwriting-support assistant. Describe only the facts "
+        "supplied; do not mention information that is not supplied. Write 2–3 "
+        "plain-English sentences for an underwriter. You may combine related "
+        "facts in one sentence, but never imply that one field causes or "
+        "determines another. Do not "
         "make pricing, premium, eligibility, coverage, or claims decisions. "
         "Do not predict future flooding. Return only JSON with exactly these "
         "keys: narrative (string), evidence_fields_used (array of supplied "
-        "field names), missing_evidence (array of absent allowlisted field names)."
+        "field names)."
     )
     user = (
         f"Prompt version: {PROMPT_VERSION}\n"
         "Allowlisted evidence:\n"
-        f"{json.dumps(evidence, sort_keys=True, ensure_ascii=True)}"
+        f"{json.dumps(evidence, sort_keys=True, ensure_ascii=True)}\n"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -264,6 +376,7 @@ class NarrativeGenerator:
         estimated_tokens = 0
         for result, policy in self._records(limit):
             evidence = build_evidence(result, policy)
+            not_available = compute_not_available(evidence)
             route = self._route(result, evidence)
             if route == "model" and self._cache_path(result["policy_id"], evidence).exists():
                 routes["cached"] += 1
@@ -296,6 +409,7 @@ class NarrativeGenerator:
         for result, policy in selected:
             policy_id = result["policy_id"]
             evidence = build_evidence(result, policy)
+            not_available = compute_not_available(evidence)
             route = self._route(result, evidence)
             if route == "template":
                 output = self._template(policy_id, result)
@@ -309,30 +423,49 @@ class NarrativeGenerator:
                 except BudgetReached:
                     stopped_for_budget = True
                     break
-                except NarrativeAPIError:
+                except NarrativeAPIError as error:
                     output = self._base_output(policy_id, "failed")
+                    output["guardrail_reason"] = error.reason
                     processed["failed"] += 1
                 else:
+                    model_reported = response_data["model_reported"]
+                    if model_reported != self.settings.groq_model:
+                        warnings.warn(
+                            f"Groq-reported model {model_reported!r} differs from "
+                            f"requested model {self.settings.groq_model!r}.",
+                            RuntimeWarning,
+                            stacklevel=2,
+                        )
                     if provenance == "api":
                         tokens_used += response_data["tokens"]
                         _write_daily_usage(self.daily_usage_path, today, tokens_used)
                     try:
-                        validated = validate_model_result(response_data["content"], evidence)
+                        validated = validate_model_result(
+                            response_data["content"], evidence, not_available
+                        )
                     except NarrativeGuardrailError as error:
                         output = self._base_output(policy_id, "rejected_by_guardrail")
                         output["guardrail_reason"] = str(error)
                         output["model"] = self.settings.groq_model
+                        output["model_reported"] = model_reported
                         output["prompt_version"] = PROMPT_VERSION
                         output["tokens"] = response_data["tokens"]
                         processed["rejected_by_guardrail"] += 1
                     else:
                         output = self._base_output(policy_id, "generated")
                         output.update(validated)
+                        narrative_model = validated["narrative"]
+                        output["narrative_model"] = narrative_model
+                        output["narrative"] = _append_missing_disclosure(
+                            narrative_model, not_available
+                        )
                         output["model"] = self.settings.groq_model
+                        output["model_reported"] = model_reported
                         output["prompt_version"] = PROMPT_VERSION
                         output["tokens"] = response_data["tokens"]
                         output["cache"] = provenance
                         processed["generated"] += 1
+            output["missing_evidence"] = not_available
             if route in ("template", "abstained"):
                 processed[route] += 1
             output_records[policy_id] = output
@@ -356,7 +489,6 @@ class NarrativeGenerator:
         remaining = self.settings.groq_daily_token_budget - tokens_used
         if estimated_tokens > remaining:
             raise BudgetReached
-        self._wait_for_capacity(estimated_tokens)
         headers = {
             "Authorization": f"Bearer {self.settings.groq_api_key}",
             "Content-Type": "application/json",
@@ -380,47 +512,80 @@ class NarrativeGenerator:
                                 "type": "array",
                                 "items": {"type": "string"},
                             },
-                            "missing_evidence": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
                         },
-                        "required": [
-                            "narrative",
-                            "evidence_fields_used",
-                            "missing_evidence",
-                        ],
+                        "required": ["narrative", "evidence_fields_used"],
                         "additionalProperties": False,
                     },
                 },
             },
         }
-        self._request_times.append(self.clock())
-        try:
-            response = self.post(
-                GROQ_CHAT_COMPLETIONS_URL,
-                headers=headers,
-                json=payload,
-                timeout=60,
-            )
-        except requests.RequestException:
-            raise NarrativeAPIError("Groq request failed.") from None
-        if response.status_code < 200 or response.status_code >= 300:
-            raise NarrativeAPIError(f"Groq returned HTTP {response.status_code}.")
+        for attempt in range(2):
+            self._wait_for_capacity(estimated_tokens)
+            self._request_times.append(self.clock())
+            try:
+                response = self.post(
+                    GROQ_CHAT_COMPLETIONS_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=60,
+                )
+            except requests.Timeout:
+                if attempt == 0:
+                    self.sleeper(1.0)
+                    continue
+                raise NarrativeAPIError("timeout") from None
+            except requests.RequestException:
+                raise NarrativeAPIError("request_error") from None
+            if 200 <= response.status_code < 300:
+                break
+            reason = _safe_http_error_reason(response)
+            retryable = response.status_code == 429 or response.status_code >= 500
+            if attempt == 0 and retryable:
+                self.sleeper(
+                    self._retry_after_seconds(response.headers.get("Retry-After"))
+                )
+                continue
+            raise NarrativeAPIError(reason)
         try:
             body = response.json()
             content = body["choices"][0]["message"]["content"]
             usage = body["usage"]
             tokens = int(usage["total_tokens"])
+            model_reported = body["model"]
         except (ValueError, KeyError, TypeError, IndexError):
-            raise NarrativeAPIError("Groq returned an incomplete response.") from None
-        if not isinstance(content, str) or tokens < 0:
-            raise NarrativeAPIError("Groq returned an invalid response.")
-        cached = {"content": content, "tokens": tokens}
+            raise NarrativeAPIError("invalid_response") from None
+        if (
+            not isinstance(content, str)
+            or not isinstance(model_reported, str)
+            or not model_reported
+            or tokens < 0
+        ):
+            raise NarrativeAPIError("invalid_response")
+        cached = {
+            "content": content,
+            "tokens": tokens,
+            "model_reported": model_reported,
+        }
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps(cached, sort_keys=True) + "\n", encoding="utf-8")
         self._token_usage.append((self.clock(), tokens))
         return cached, "api"
+
+    @staticmethod
+    def _retry_after_seconds(value: str | None) -> float:
+        if not value:
+            return 1.0
+        try:
+            delay = float(value)
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(value)
+            except (TypeError, ValueError, OverflowError):
+                return 1.0
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+        return max(0.0, delay)
 
     def _cache_path(self, policy_id: str, evidence: dict[str, str]) -> Path:
         cache_key = _json_hash(
@@ -454,23 +619,35 @@ class NarrativeGenerator:
         return {
             "policy_id": policy_id,
             "status": status,
+            "narrative_model": "",
             "narrative": "",
             "evidence_fields_used": [],
             "missing_evidence": [],
             "guardrail_reason": "",
             "model": "",
+            "model_reported": "",
             "prompt_version": PROMPT_VERSION,
             "tokens": 0,
         }
 
     def _template(self, policy_id: str, result: dict[str, str]) -> dict[str, Any]:
-        reason = result.get("manual_review_reason", "").strip()
-        if not reason:
-            reason = "the address match did not meet building-level verification"
+        reason = result.get("manual_review_reason", "").strip().casefold()
+        readable_reasons = {
+            "street-level only": "matched only at street level",
+            "postal or city level": "matched only at postal or city level",
+            "no match": "no address match was found",
+            "api error": "the geocoding service returned an API error",
+            "location conflict (state mismatch)": (
+                "the standardized state differed from the input state"
+            ),
+        }
+        reason = readable_reasons.get(
+            reason, "the address match did not meet building-level verification"
+        )
         output = self._base_output(policy_id, "template")
         output["narrative"] = (
-            f"The location could not be verified to building level because {reason}. "
-            "Enrichment was withheld pending address remediation."
+            f"The location could not be verified to building level (reason: {reason}). "
+            "Flood enrichment was withheld pending address remediation."
         )
         return output
 
