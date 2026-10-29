@@ -23,6 +23,7 @@ INPUT_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
 OUTPUT_ROOT = PROJECT_ROOT / "data" / "output" / "run"
 RESULTS_PATH = OUTPUT_ROOT / "results_rowlevel.csv"
 STAGES = ("geocode", "preciselyid", "enrich", "compare")
+GEOCODE_INPUT_MODES = ("structured", "single-line")
 COMPARISON_SEED = 20261029
 COMPARISON_SAMPLE_SIZE = 40
 RETRY_DELAYS = (0.5, 1.0)
@@ -73,6 +74,7 @@ class PlannedRequest:
     cache_operation: str
     params: dict[str, Any]
     invoke: Callable[[PreciselyClient], ProviderResponse]
+    request_mode: str = "default"
 
 
 def _read_policies(path: Path) -> list[dict[str, str]]:
@@ -190,7 +192,21 @@ def _std_address(result: dict[str, str]) -> str:
     )
 
 
-def _request_hash(operation: str, params: dict[str, Any]) -> str:
+def _request_hash(
+    operation: str,
+    params: dict[str, Any],
+    request_mode: str = "default",
+) -> str:
+    canonical = json.dumps(
+        {"operation": operation, "mode": request_mode, "params": params},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _legacy_request_hash(operation: str, params: dict[str, Any]) -> str:
     canonical = json.dumps(
         {"operation": operation, "params": params},
         sort_keys=True,
@@ -210,7 +226,12 @@ class StagedPipeline:
         input_path: Path = INPUT_PATH,
         project_root: Path = PROJECT_ROOT,
         seed: int = COMPARISON_SEED,
+        geocode_input_mode: str = "structured",
     ) -> None:
+        if geocode_input_mode not in GEOCODE_INPUT_MODES:
+            raise ValueError(
+                f"geocode_input_mode must be one of {', '.join(GEOCODE_INPUT_MODES)}."
+            )
         self.settings = settings
         self.ledger = ledger
         self.client = client
@@ -220,6 +241,7 @@ class StagedPipeline:
         self.cache_root = self.output_root / "cache"
         self.results_path = self.output_root / "results_rowlevel.csv"
         self.seed = seed
+        self.geocode_input_mode = geocode_input_mode
         self._run_provenance: dict[tuple[str, str], str] = {}
         self._run_responses: dict[tuple[str, str], ProviderResponse] = {}
 
@@ -234,7 +256,17 @@ class StagedPipeline:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             raise ValueError(f"Unable to read response cache at {path}.") from None
-        if record.get("request_hash") != _request_hash(request.operation, request.params):
+        cache_hash = _request_hash(
+            request.operation,
+            request.params,
+            request.request_mode,
+        )
+        legacy_single_line_hash = (
+            _legacy_request_hash(request.operation, request.params)
+            if request.request_mode == "single-line"
+            else None
+        )
+        if record.get("request_hash") not in (cache_hash, legacy_single_line_hash):
             return None
         return ProviderResponse(
             status_code=record["status_code"],
@@ -263,7 +295,11 @@ class StagedPipeline:
         path.write_text(
             json.dumps(
                 {
-                    "request_hash": _request_hash(request.operation, request.params),
+                    "request_hash": _request_hash(
+                        request.operation,
+                        request.params,
+                        request.request_mode,
+                    ),
                     "status_code": response.status_code,
                     "data": response.data,
                     "error": response.error,
@@ -332,14 +368,54 @@ class StagedPipeline:
         *,
         tier: str,
         cache_operation: str | None = None,
+        input_mode: str | None = None,
     ) -> PlannedRequest:
-        address = _raw_address(row)
+        mode = input_mode or self.geocode_input_mode
+        if mode not in GEOCODE_INPUT_MODES:
+            raise ValueError(
+                f"geocode input mode must be one of {', '.join(GEOCODE_INPUT_MODES)}."
+            )
+        if mode == "structured":
+            main_address = " ".join(
+                part.strip()
+                for part in (row["raw_address_line1"], row["raw_address_line2"])
+                if part.strip()
+            )
+            params = {"mainAddress": main_address}
+            params.update(
+                {
+                    key: value
+                    for key, value in (
+                        ("areaName3", row["raw_city"]),
+                        ("areaName1", row["raw_state"]),
+                        ("postalCode", row["raw_zip5"]),
+                        ("country", "USA"),
+                    )
+                    if value.strip()
+                }
+            )
+            request_value: str | dict[str, str] = params
+        else:
+            address = _raw_address(row)
+            params = {"mainAddress": address}
+            request_value = address
+        mode_suffix = "structured" if mode == "structured" else "single_line"
+        operation_dir = (
+            f"{cache_operation}_{mode_suffix}"
+            if cache_operation is not None
+            else (
+                f"geocode_{tier}_structured"
+                if mode == "structured"
+                else f"geocode_{tier}"
+            )
+        )
         return PlannedRequest(
             row["policy_id"],
             f"geocode_{tier}",
-            cache_operation or f"geocode_{tier}",
-            {"mainAddress": address},
-            lambda client, address=address, tier=tier: client.geocode(address, tier),
+            operation_dir,
+            params,
+            lambda client, value=request_value, tier=tier: client.geocode(value, tier),
+            request_mode=mode,
         )
 
     def _preciselyid_request(
@@ -417,7 +493,9 @@ class StagedPipeline:
         )
 
     def _load_geocode(self, row: dict[str, str]) -> ProviderResponse | None:
-        return self._read_cache(self._geocode_request(row, tier="premium"))
+        return self._read_cache(
+            self._geocode_request(row, tier="premium", input_mode=self.geocode_input_mode)
+        )
 
     def _eligible_records(
         self, rows: list[dict[str, str]]
@@ -466,7 +544,10 @@ class StagedPipeline:
             rows = rows[:limit]
         requests: list[PlannedRequest] = []
         if stage == "geocode":
-            requests = [self._geocode_request(row, tier="premium") for row in rows]
+            requests = [
+                self._geocode_request(row, tier="premium", input_mode=self.geocode_input_mode)
+                for row in rows
+            ]
         elif stage == "preciselyid":
             for row, geocode in self._eligible_records(rows):
                 requests.append(self._preciselyid_request(row, geocode.data))
@@ -645,7 +726,8 @@ class StagedPipeline:
                     "failed" if geocode.status_code != 200 else "api"
                 )
                 result["geocode_provenance"] = self._run_provenance.get(
-                    ("geocode_premium", policy["policy_id"]), "cached"
+                    (geocode_request.cache_operation, policy["policy_id"]),
+                    "cached",
                 )
             else:
                 result["geocode_status"] = ""
@@ -791,7 +873,7 @@ class StagedPipeline:
                 result["compare_provenance"] = _aggregate_provenance(
                     self._run_provenance,
                     (
-                        ("compare_geocode_basic", policy["policy_id"]),
+                        (basic_request.cache_operation, policy["policy_id"]),
                         ("compare_flood_by_location", policy["policy_id"]),
                     ),
                     (basic, comparison_flood),
@@ -979,6 +1061,12 @@ def run_pipeline(
     parser.add_argument("--stage", choices=STAGES, required=True)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--geocode-input",
+        choices=GEOCODE_INPUT_MODES,
+        default="structured",
+        help="Geocode address parameters format (default: structured)",
+    )
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
@@ -989,6 +1077,7 @@ def run_pipeline(
         ledger,
         input_path=input_path,
         project_root=project_root,
+        geocode_input_mode=args.geocode_input,
     )
     requests, estimate = print_plan_and_gate(pipeline, args.stage, limit=args.limit)
     if estimate > ledger.remaining:

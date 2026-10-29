@@ -1,5 +1,6 @@
 import csv
 from decimal import Decimal
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -10,8 +11,6 @@ import requests
 from address_intelligence.config import Settings
 from address_intelligence.credits import CreditCapExceeded, CreditLedger
 from address_intelligence.pipeline import (
-    INPUT_PATH,
-    PlannedRequest,
     StagedPipeline,
     _geocode_reason,
     haversine_km,
@@ -291,7 +290,9 @@ def test_http_200_no_match_response_is_cached(tmp_path, capsys):
     assert len(client.calls) == 1
     assert retry_client.calls == []
     assert pipeline.ledger.cumulative_spent == spent
-    cached = next((pipeline.cache_root / "geocode_premium").glob("*.json"))
+    cached = next(
+        (pipeline.cache_root / "geocode_premium_structured").glob("*.json")
+    )
     assert json.loads(cached.read_text(encoding="utf-8"))["status_code"] == 200
     with pipeline.results_path.open(newline="", encoding="utf-8") as source:
         result = next(csv.DictReader(source))
@@ -356,6 +357,110 @@ def test_request_hash_prevents_stale_cache_reuse(tmp_path, capsys):
     request = pipeline._geocode_request(changed, tier="premium")
 
     assert pipeline._read_cache(request) is None
+
+
+def test_structured_geocode_parameters_and_empty_fields_omitted(tmp_path):
+    row = _row()
+    row.update(
+        {
+            "raw_address_line1": "1141 Napoheon Ave",
+            "raw_address_line2": "Apt 3",
+            "raw_city": "",
+            "raw_state": "LA",
+            "raw_zip5": "",
+        }
+    )
+    pipeline, _ = _pipeline(tmp_path, [row])
+
+    request = pipeline._geocode_request(row, tier="premium")
+    client = Mock()
+    request.invoke(client)
+
+    assert request.request_mode == "structured"
+    assert request.params == {
+        "mainAddress": "1141 Napoheon Ave Apt 3",
+        "areaName1": "LA",
+        "country": "USA",
+    }
+    client.geocode.assert_called_once_with(
+        {
+            "mainAddress": "1141 Napoheon Ave Apt 3",
+            "areaName1": "LA",
+            "country": "USA",
+        },
+        "premium",
+    )
+
+
+def test_single_line_mode_still_uses_original_format(tmp_path):
+    pipeline, client = _pipeline(tmp_path, [_row()])
+    pipeline.geocode_input_mode = "single-line"
+
+    request = pipeline._geocode_request(_row(), tier="premium")
+    request.invoke(client)
+
+    assert request.params == {
+        "mainAddress": "999 Raw Rd Apt 5, Raw City, TX 70002"
+    }
+    assert request.request_mode == "single-line"
+    assert request.cache_operation == "geocode_premium"
+    assert client.calls == [
+        ("geocode_premium", ("999 Raw Rd Apt 5, Raw City, TX 70002",))
+    ]
+
+
+def test_geocode_mode_is_part_of_cache_key_and_cache_location(tmp_path):
+    pipeline, client = _pipeline(tmp_path, [_row()])
+    structured = pipeline._geocode_request(_row(), tier="premium")
+    single = pipeline._geocode_request(
+        _row(),
+        tier="premium",
+        input_mode="single-line",
+    )
+    client.responses["geocode_premium"] = [_response(_geocode_data())]
+
+    assert pipeline._cache_path(structured) != pipeline._cache_path(single)
+    assert structured.params != single.params
+    pipeline._invoke(structured)
+    pipeline._invoke(single)
+
+    assert pipeline._cache_path(structured).exists()
+    assert pipeline._cache_path(single).exists()
+    assert pipeline._read_cache(structured) is not None
+    assert pipeline._read_cache(single) is not None
+
+
+def test_legacy_single_line_cache_remains_readable(tmp_path):
+    pipeline, _ = _pipeline(tmp_path, [_row()])
+    request = pipeline._geocode_request(
+        _row(),
+        tier="premium",
+        input_mode="single-line",
+    )
+    path = pipeline._cache_path(request)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_hash = json.dumps(
+        {
+            "operation": request.operation,
+            "params": request.params,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    path.write_text(
+        json.dumps(
+            {
+                "request_hash": hashlib.sha256(legacy_hash.encode("utf-8")).hexdigest(),
+                "status_code": 200,
+                "data": _geocode_data(),
+                "error": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert pipeline._read_cache(request) is not None
 
 
 def test_budget_gate_refuses_before_operation(tmp_path, capsys):

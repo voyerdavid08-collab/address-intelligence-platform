@@ -67,6 +67,29 @@ def test_token_request_uses_documented_oauth_format(tmp_path):
     assert result.succeeded
 
 
+def test_geocode_accepts_structured_query_parameters(tmp_path):
+    session = Mock()
+    session.post.return_value = _response(
+        200, {"access_token": "private-token", "expiresIn": "35999"}
+    )
+    session.request.return_value = _response(
+        200, {"candidates": [{"precisionCode": "S8"}]}
+    )
+
+    client = _client(tmp_path, session=session)
+    params = {
+        "mainAddress": "1141 Napoheon Ave Apt 3",
+        "areaName3": "New Orleans",
+        "areaName1": "LA",
+        "postalCode": "70115",
+        "country": "USA",
+    }
+
+    client.geocode(params, "premium")
+
+    assert session.request.call_args.kwargs["params"] == params
+
+
 def test_tokens_are_cached_until_near_expiry(tmp_path):
     session = Mock()
     session.post.return_value = _response(

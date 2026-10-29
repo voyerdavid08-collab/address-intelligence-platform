@@ -70,7 +70,11 @@ class PreciselyClient:
             time.sleep(delay)
         self._last_request_at = time.monotonic()
 
-    def geocode(self, address: str, tier: str) -> ProviderResponse:
+    def geocode(
+        self,
+        address: str | dict[str, str],
+        tier: str,
+    ) -> ProviderResponse:
         tiers = {
             "premium": "geocode_premium",
             "advanced": "geocode_advanced",
@@ -78,10 +82,13 @@ class PreciselyClient:
         }
         if tier not in tiers:
             raise ValueError("tier must be premium, advanced, or basic.")
+        params = {"mainAddress": address} if isinstance(address, str) else address
+        if not isinstance(params.get("mainAddress"), str) or not params["mainAddress"].strip():
+            raise ValueError("Geocode requires a non-empty mainAddress.")
         return self._get(
             tiers[tier],
             f"/geocode/v1/{tier}/geocode",
-            {"mainAddress": address},
+            params,
         )
 
     def preciselyid_by_address(self, address: str) -> ProviderResponse:
