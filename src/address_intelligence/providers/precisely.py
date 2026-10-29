@@ -19,6 +19,7 @@ class ProviderResponse:
     data: Any | None
     error: str | None
     credits_recorded: Decimal
+    retry_after: str | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -26,9 +27,15 @@ class ProviderResponse:
 
 
 class _ProviderFailure(Exception):
-    def __init__(self, status_code: int | None, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int | None,
+        message: str,
+        retry_after: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.retry_after = retry_after
 
 
 class PreciselyClient:
@@ -42,12 +49,26 @@ class PreciselyClient:
         ledger: CreditLedger,
         *,
         session: requests.Session | None = None,
+        min_request_interval: float = 0.0,
     ) -> None:
         self.settings = settings
         self.ledger = ledger
         self.session = session or requests.Session()
+        if min_request_interval < 0:
+            raise ValueError("min_request_interval cannot be negative.")
+        self.min_request_interval = min_request_interval
+        self._last_request_at = 0.0
         self._token: str | None = None
         self._token_expires_at = 0.0
+
+    def _throttle(self) -> None:
+        if self.min_request_interval <= 0:
+            return
+        elapsed = time.monotonic() - self._last_request_at
+        delay = self.min_request_interval - elapsed
+        if delay > 0:
+            time.sleep(delay)
+        self._last_request_at = time.monotonic()
 
     def geocode(self, address: str, tier: str) -> ProviderResponse:
         tiers = {
@@ -172,6 +193,7 @@ class PreciselyClient:
         self.ledger.check(operation, quantity)
         try:
             token = self._get_token()
+            self._throttle()
             response = self.session.request(
                 method,
                 f"{self.settings.base_url.rstrip('/')}{endpoint}",
@@ -181,7 +203,13 @@ class PreciselyClient:
             )
         except _ProviderFailure as exc:
             self.ledger.record_failure(operation)
-            return ProviderResponse(exc.status_code, None, str(exc), Decimal("0"))
+            return ProviderResponse(
+                exc.status_code,
+                None,
+                str(exc),
+                Decimal("0"),
+                exc.retry_after,
+            )
         except ConfigError:
             self.ledger.record_failure(operation)
             return ProviderResponse(None, None, "Precisely credentials are not configured.", Decimal("0"))
@@ -197,7 +225,11 @@ class PreciselyClient:
         if response.status_code != 200:
             self.ledger.record_failure(operation)
             return ProviderResponse(
-                response.status_code, data, "Precisely returned an unsuccessful status.", Decimal("0")
+                response.status_code,
+                data,
+                "Precisely returned an unsuccessful status.",
+                Decimal("0"),
+                response.headers.get("Retry-After"),
             )
         if not self._has_results(data):
             self.ledger.record_failure(operation)
@@ -215,6 +247,7 @@ class PreciselyClient:
         api_key, api_secret = self.settings.require_api_credentials()
         encoded = base64.b64encode(f"{api_key}:{api_secret}".encode("utf-8")).decode("ascii")
         try:
+            self._throttle()
             response = self.session.post(
                 f"{self.settings.base_url.rstrip('/')}/oauth/token",
                 headers={
@@ -227,7 +260,11 @@ class PreciselyClient:
         except requests.RequestException:
             raise _ProviderFailure(None, "OAuth token request failed.") from None
         if response.status_code != 200:
-            raise _ProviderFailure(response.status_code, "OAuth token request was unsuccessful.")
+            raise _ProviderFailure(
+                response.status_code,
+                "OAuth token request was unsuccessful.",
+                response.headers.get("Retry-After"),
+            )
         try:
             payload = response.json()
             token = payload["access_token"]

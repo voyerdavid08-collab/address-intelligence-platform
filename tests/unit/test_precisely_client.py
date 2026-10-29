@@ -319,3 +319,27 @@ def test_network_exceptions_return_safe_structured_error(tmp_path):
     assert "private-token" not in response.error
     assert "test-secret" not in response.error
     ledger.record_failure.assert_called_once_with("geocode_basic")
+
+
+def test_configured_request_interval_throttles_oauth_and_api(tmp_path, monkeypatch):
+    session = Mock()
+    session.post.return_value = _response(
+        200, {"access_token": "private-token", "expiresIn": "35999"}
+    )
+    session.request.return_value = _response(
+        200, {"candidates": [{"precisionCode": "S8"}]}
+    )
+    client = PreciselyClient(
+        _settings(),
+        CreditLedger(Decimal("100"), tmp_path / "ledger.json"),
+        session=session,
+        min_request_interval=0.2,
+    )
+    clock_values = iter((100.0, 100.0, 100.0, 100.1, 100.2))
+    delays = []
+    monkeypatch.setattr(precisely.time, "monotonic", lambda: next(clock_values))
+    monkeypatch.setattr(precisely.time, "sleep", delays.append)
+
+    client.geocode("sample address", "premium")
+
+    assert delays == [pytest.approx(0.1)]
