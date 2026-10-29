@@ -166,7 +166,10 @@ def haversine_km(
     return EARTH_RADIUS_KM * 2 * math.asin(math.sqrt(min(1.0, hav)))
 
 
-def _geocode_reason(response: ProviderResponse) -> tuple[str, str]:
+def _geocode_reason(
+    response: ProviderResponse,
+    expected_state: str | None = None,
+) -> tuple[str, str]:
     if response.status_code != 200:
         return "manual_review", "API error"
     candidate = _candidate(response.data)
@@ -174,6 +177,17 @@ def _geocode_reason(response: ProviderResponse) -> tuple[str, str]:
         return "manual_review", "no match"
     code = candidate.get("precisionCode")
     if isinstance(code, str) and code.startswith(("S5", "S7", "S8")):
+        if expected_state is not None:
+            address = candidate.get("address")
+            returned_state = (
+                address.get("areaName1") if isinstance(address, dict) else None
+            )
+            if (
+                not isinstance(returned_state, str)
+                or returned_state.strip().casefold()
+                != expected_state.strip().casefold()
+            ):
+                return "manual_review", "location conflict (state mismatch)"
         return "eligible", ""
     if isinstance(code, str) and code.startswith("S4"):
         return "manual_review", "street-level only"
@@ -507,7 +521,10 @@ class StagedPipeline:
         eligible = []
         for row in rows:
             response = self._load_geocode(row)
-            if response is not None and _geocode_reason(response)[0] == "eligible":
+            if (
+                response is not None
+                and _geocode_reason(response, row["raw_state"])[0] == "eligible"
+            ):
                 eligible.append((row, response))
         return eligible
 
@@ -736,6 +753,12 @@ class StagedPipeline:
             geocode = self._response_for(geocode_request)
             if geocode is not None:
                 _apply_geocode(result, geocode)
+                eligibility, reason = _geocode_reason(
+                    geocode,
+                    policy["raw_state"],
+                )
+                result["eligibility"] = eligibility
+                result["manual_review_reason"] = reason
                 result["geocode_status"] = (
                     "failed" if geocode.status_code != 200 else "api"
                 )
@@ -841,7 +864,10 @@ class StagedPipeline:
         eligible = []
         for policy in policies:
             geocode = self._load_geocode(policy)
-            if geocode is not None and _geocode_reason(geocode)[0] == "eligible":
+            if (
+                geocode is not None
+                and _geocode_reason(geocode, policy["raw_state"])[0] == "eligible"
+            ):
                 eligible.append((policy, geocode))
         for policy, _ in self._compare_sample(eligible):
             result = result_by_id[policy["policy_id"]]

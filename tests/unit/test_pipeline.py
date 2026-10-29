@@ -224,6 +224,43 @@ def test_no_candidate_and_api_error_are_manual_review():
     )
 
 
+def test_state_consistency_is_required_for_address_level_eligibility():
+    response = _response(_geocode_data(state="LA"))
+
+    assert _geocode_reason(response, "TX") == (
+        "manual_review",
+        "location conflict (state mismatch)",
+    )
+    assert _geocode_reason(response, "la") == ("eligible", "")
+
+
+def test_location_conflict_is_excluded_from_all_followup_plans(tmp_path):
+    conflicted = _row("POL-CONFLICT")
+    matching = _row("POL-MATCH")
+    pipeline, _ = _pipeline(tmp_path, [conflicted, matching])
+
+    conflict_geocode = _response(_geocode_data(state="LA"))
+    matching_geocode = _response(_geocode_data(state="TX"))
+    for row, response in (
+        (conflicted, conflict_geocode),
+        (matching, matching_geocode),
+    ):
+        pipeline._write_cache(
+            pipeline._geocode_request(row, tier="premium"),
+            response,
+        )
+    pipeline._write_cache(
+        pipeline._flood_request(matching, (29.0, -95.0)),
+        _response({"floodZone": {"code": "X"}}),
+    )
+
+    for stage in ("preciselyid", "enrich", "compare"):
+        planned = pipeline.plan(stage)
+        assert planned
+        assert all(request.policy_id == matching["policy_id"] for request in planned)
+        assert all(request.policy_id != conflicted["policy_id"] for request in planned)
+
+
 def test_standardized_address_used_for_preciselyid_and_property(tmp_path, capsys):
     pipeline, client = _pipeline(tmp_path, [_row()])
 
@@ -295,6 +332,7 @@ def test_missing_standardized_street_prevents_preciselyid_and_property(
     data = _geocode_data(line1="", city="SAMPLE CITY", state="ZZ", zip5="00000")
     data["candidates"][0]["formattedStreetAddress"] = ""
     row = _row()
+    row["raw_state"] = "ZZ"
     pipeline, client = _pipeline(tmp_path, [row])
     geocode_request = pipeline._geocode_request(row, tier="premium")
     pipeline._write_cache(
