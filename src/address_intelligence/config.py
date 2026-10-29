@@ -24,6 +24,9 @@ class Settings:
     credit_hard_cap: Decimal
     trial_credits: Decimal
     log_level: str
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_daily_token_budget: int = 180000
 
     @classmethod
     def from_env(cls, *, dotenv_path: str | Path | None = None) -> "Settings":
@@ -58,6 +61,18 @@ class Settings:
         if log_level not in logging.getLevelNamesMapping():
             raise ConfigError("LOG_LEVEL must be a valid standard-library logging level.")
 
+        token_budget_value = value("GROQ_DAILY_TOKEN_BUDGET", "180000")
+        try:
+            groq_daily_token_budget = int(token_budget_value)
+        except ValueError:
+            raise ConfigError(
+                "GROQ_DAILY_TOKEN_BUDGET must be a positive integer."
+            ) from None
+        if groq_daily_token_budget <= 0:
+            raise ConfigError(
+                "GROQ_DAILY_TOKEN_BUDGET must be a positive integer."
+            )
+
         return cls(
             api_key=value("PRECISELY_API_KEY", "") or None,
             api_secret=value("PRECISELY_API_SECRET", "") or None,
@@ -65,6 +80,9 @@ class Settings:
             credit_hard_cap=credit_hard_cap,
             trial_credits=trial_credits,
             log_level=log_level,
+            groq_api_key=value("GROQ_API_KEY", "") or None,
+            groq_model=value("GROQ_MODEL", "openai/gpt-oss-120b"),
+            groq_daily_token_budget=groq_daily_token_budget,
         )
 
     def require_api_credentials(self) -> tuple[str, str]:
@@ -87,6 +105,9 @@ class Settings:
             f"base_url={self.base_url!r}, "
             f"credit_hard_cap={self.credit_hard_cap!r}, "
             f"trial_credits={self.trial_credits!r}, "
+            f"groq_api_key={'****' if self.groq_api_key else None!r}, "
+            f"groq_model={self.groq_model!r}, "
+            f"groq_daily_token_budget={self.groq_daily_token_budget!r}, "
             f"log_level={self.log_level!r})"
         )
 

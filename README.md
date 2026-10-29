@@ -24,7 +24,7 @@ Coming soon.
 
 ## Privacy by design
 
-The synthetic dataset contains no person names and uses policy IDs only, following data minimization. Only address fields are sent to external APIs; in production, personal data stays inside the carrier and records are linked by policy ID. If re-identification is ever needed, use keyed tokenization (HMAC with a secret key or a token vault), not plain hashing: hashes of names can be reversed by dictionary attack and remain personal data.
+The synthetic dataset contains no person names and uses policy IDs only, following data minimization. Only the needed address fields are sent to Precisely; only the derived fields in the AI allowlist are sent to Groq. In production, personal data stays inside the carrier and records are linked by policy ID. If re-identification is ever needed, use keyed tokenization (HMAC with a secret key or a token vault), not plain hashing: hashes of names can be reversed by dictionary attack and remain personal data.
 
 ## Data licensing
 
@@ -42,9 +42,13 @@ Synthetic policy records use generated house numbers on real public street ancho
 
 Faker was considered for addresses but generates fictional streets that cannot be verified or enriched; real street anchors (validated with Geocode Premium) with generated house numbers were used instead. Faker is used for non-address fields.
 
-## Enrichment and AI
+## AI narrative
 
-Coming soon.
+The optional narrative stage turns a small, allowlisted set of derived location and policy fields into a short underwriting-support summary. It is not a decision engine: a human underwriter remains responsible for review, and the output makes no pricing, premium, eligibility, coverage, or claims decisions and does not predict future flooding. Manual-review records receive a deterministic remediation template without a model call; records without both flood-zone and flood-risk evidence abstain. Model responses are checked for valid JSON, supported evidence-field references, grounded numbers, length, and prohibited decision language. Aggregate status and guardrail counts are evaluated in `reports/ai_narrative_summary.md`; a seeded local review sheet is written under ignored `data/output/run/`.
+
+## AI provider choice and data handling
+
+Groq was selected for the brief's free-tier requirement (free plan, $0). Its Services Agreement §4.2 prohibits training on inputs and outputs, and organization-wide Zero Data Retention is enabled in the Groq console; without that setting, Groq states inputs and outputs may be stored for up to 30 days. The selected model, `openai/gpt-oss-120b`, is open-weight and hosted by Groq; requests are sent to Groq, not OpenAI. Only the derived allowlisted fields needed for the narrative are sent—never addresses, coordinates, ZIP codes, PreciselyIDs, water-body names, or policy IDs. Row-level Precisely outputs remain private and temporary, consistent with the Precisely APIs Acceptable Use Policy §4.1–4.2. Gemini API's free tier was excluded because prompts may be used to improve products, human review is involved, and its terms advise against confidential data. Hugging Face was excluded because its approximately $0.10/month credit and provider-dependent terms do not meet the use case; running a local model is impractical on the available hardware. Production use would require an enterprise agreement with a data processing addendum.
 
 ## Outputs
 
