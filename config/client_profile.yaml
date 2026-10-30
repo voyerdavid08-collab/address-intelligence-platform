@@ -15,6 +15,15 @@ input:
     zip5: "raw_zip5"
     metro: "metro"
 
+# Keep per-client row-level outputs and caches under the ignored data/output tree.
+output:
+  run_dir: "data/output/run"
+  reports_dir: "reports"
+
+# Optional labelled reference data; real clients typically do not supply this.
+evaluation:
+  ground_truth_path: "data/input/ground_truth.csv"
+
 verification:
   eligible_precision_prefixes: ["S5", "S7", "S8"]
 

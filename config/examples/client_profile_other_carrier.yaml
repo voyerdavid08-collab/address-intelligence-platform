@@ -15,6 +15,10 @@ input:
     zip5: "postal"
     metro: "market"
 
+output:
+  run_dir: "data/output/other_carrier"
+  reports_dir: "data/output/other_carrier/reports"
+
 verification:
   eligible_precision_prefixes: ["S5", "S7", "S8"]
 

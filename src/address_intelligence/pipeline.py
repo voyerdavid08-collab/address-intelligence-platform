@@ -25,13 +25,14 @@ from address_intelligence.providers.precisely import PreciselyClient, ProviderRe
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INPUT_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
-OUTPUT_ROOT = PROJECT_ROOT / "data" / "output" / "run"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+INPUT_PATH = _DEFAULT_PROFILE.input_path
+OUTPUT_ROOT = _DEFAULT_PROFILE.run_dir
 RESULTS_PATH = OUTPUT_ROOT / "results_rowlevel.csv"
 STAGES = ("geocode", "preciselyid", "enrich", "compare")
 GEOCODE_INPUT_MODES = ("structured", "single-line")
-COMPARISON_SEED = 20261029
-COMPARISON_SAMPLE_SIZE = 40
+COMPARISON_SEED = _DEFAULT_PROFILE.comparison_seed
+COMPARISON_SAMPLE_SIZE = _DEFAULT_PROFILE.comparison_sample_size
 RETRY_DELAYS = (0.5, 1.0)
 EARTH_RADIUS_KM = 6371.0088
 
@@ -273,10 +274,16 @@ class StagedPipeline:
         self.settings = settings
         self.ledger = ledger
         self.client = client
-        self.profile = profile or load_client_profile()
+        self.profile = profile or _DEFAULT_PROFILE
         self.input_path = input_path or self.profile.input_path
         self.project_root = project_root
-        self.output_root = project_root / "data" / "output" / "run"
+        if self.profile.project_root.resolve() == project_root.resolve():
+            self.output_root = self.profile.run_dir
+        else:
+            relative_run_dir = self.profile.run_dir.relative_to(
+                self.profile.project_root
+            )
+            self.output_root = project_root / relative_run_dir
         self.cache_root = self.output_root / "cache"
         self.results_path = self.output_root / "results_rowlevel.csv"
         self.seed = self.profile.comparison_seed if profile is not None else seed
@@ -1260,7 +1267,7 @@ def run_pipeline(
     if input("Type YES to authorize this staged Precisely run: ").strip() != "YES":
         print("Execution cancelled.")
         return 1
-    live_settings = Settings.from_env()
+    live_settings = Settings.from_env(profile_path=args.profile)
     live_settings.require_api_credentials()
     pipeline.settings = live_settings
     pipeline.client = PreciselyClient(

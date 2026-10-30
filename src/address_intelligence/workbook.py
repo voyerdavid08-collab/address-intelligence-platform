@@ -9,16 +9,23 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.metrics import _fully_correct, _is_correct_building
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INPUT_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
-GROUND_TRUTH_PATH = PROJECT_ROOT / "data" / "input" / "ground_truth.csv"
-RESULTS_PATH = PROJECT_ROOT / "data" / "output" / "run" / "results_rowlevel.csv"
-SUMMARY_PATH = PROJECT_ROOT / "reports" / "before_after_summary.csv"
-PUBLIC_PATH = PROJECT_ROOT / "reports" / "before_after_workbook.xlsx"
-PRIVATE_PATH = PROJECT_ROOT / "data" / "output" / "run" / "before_after_workbook_PRIVATE.xlsx"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+INPUT_PATH = _DEFAULT_PROFILE.input_path
+GROUND_TRUTH_PATH = _DEFAULT_PROFILE.ground_truth_path
+RESULTS_PATH = _DEFAULT_PROFILE.run_dir / "results_rowlevel.csv"
+SUMMARY_PATH = _DEFAULT_PROFILE.reports_dir / "before_after_summary.csv"
+PUBLIC_PATH = _DEFAULT_PROFILE.reports_dir / "before_after_workbook.xlsx"
+PRIVATE_PATH = _DEFAULT_PROFILE.run_dir / "before_after_workbook_PRIVATE.xlsx"
 DATA_OUTPUT_ROOT = PROJECT_ROOT / "data" / "output"
 SHEET_NAMES = ("About", "Raw", "Validated", "Enriched", "Summary stats")
 PUBLIC_BANNER = (
@@ -324,7 +331,16 @@ def build_workbooks(
     private_path: Path = PRIVATE_PATH,
     data_output_root: Path = DATA_OUTPUT_ROOT,
     public_only: bool = False,
+    profile: ClientProfile | None = None,
 ) -> dict[str, dict[str, int] | None]:
+    if profile is not None:
+        input_path = profile.input_path
+        ground_truth_path = profile.ground_truth_path
+        results_path = profile.run_dir / "results_rowlevel.csv"
+        summary_path = profile.reports_dir / "before_after_summary.csv"
+        public_path = profile.reports_dir / "before_after_workbook.xlsx"
+        private_path = profile.run_dir / "before_after_workbook_PRIVATE.xlsx"
+        data_output_root = profile.project_root / "data" / "output"
     if not public_only and results_path.exists():
         try:
             private_path.resolve().relative_to(data_output_root.resolve())
@@ -333,6 +349,9 @@ def build_workbooks(
                 "Private workbook output must be within data/output/."
             ) from exc
     raw_columns, raw_rows = _read_csv(input_path)
+    private_raw_rows = (
+        read_client_policies(profile) if profile is not None else raw_rows
+    )
     summary_columns, summary_rows = _read_csv(summary_path)
     public_validated = _public_examples(VALIDATED_COLUMNS, enriched=False)
     public_enriched = _public_examples(ENRICHED_COLUMNS, enriched=True)
@@ -356,9 +375,14 @@ def build_workbooks(
             f"PRIVATE workbook skipped: local results file is missing ({results_path})."
         )
         return result
+    if ground_truth_path is None:
+        print("PRIVATE workbook skipped: no ground-truth reference is configured.")
+        return result
     _, truth_rows = _read_csv(ground_truth_path)
     _, result_rows = _read_csv(results_path)
-    private_validated, private_enriched = _private_rows(raw_rows, result_rows, truth_rows)
+    private_validated, private_enriched = _private_rows(
+        private_raw_rows, result_rows, truth_rows
+    )
     result["PRIVATE"] = _write_workbook(
         private_path,
         private=True,
@@ -375,12 +399,18 @@ def build_workbooks(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build public and private before/after workbooks.")
     parser.add_argument("--public-only", action="store_true")
+    parser.add_argument("--profile", type=Path, default=None)
     args = parser.parse_args(argv)
-    counts = build_workbooks(public_only=args.public_only)
+    profile = load_client_profile(args.profile)
+    counts = build_workbooks(public_only=args.public_only, profile=profile)
     for version, tab_counts in counts.items():
         if tab_counts is None:
             continue
-        path = PUBLIC_PATH if version == "PUBLIC" else PRIVATE_PATH
+        path = (
+            profile.reports_dir / "before_after_workbook.xlsx"
+            if version == "PUBLIC"
+            else profile.run_dir / "before_after_workbook_PRIVATE.xlsx"
+        )
         print(f"{version}: {path}")
         print(f"Tabs: {', '.join(SHEET_NAMES)}")
         for tab in SHEET_NAMES:

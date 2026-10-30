@@ -18,15 +18,21 @@ import requests
 
 from address_intelligence.config import Settings
 from address_intelligence.flood import flood_zone_base, risk_tier
+from address_intelligence.client_profile import DEFAULT_PROFILE_PATH, load_client_profile
+from address_intelligence.client_profile import ClientProfile, read_client_policies
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RUN_ROOT = PROJECT_ROOT / "data" / "output" / "run"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+RUN_ROOT = _DEFAULT_PROFILE.run_dir
 RESULTS_PATH = RUN_ROOT / "results_rowlevel.csv"
-POLICIES_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
+POLICIES_PATH = _DEFAULT_PROFILE.input_path
 NARRATIVES_PATH = RUN_ROOT / "narratives.jsonl"
 CACHE_ROOT = RUN_ROOT / "cache" / "narratives"
 DAILY_USAGE_PATH = CACHE_ROOT / "daily_usage.json"
+REPORTS_ROOT = _DEFAULT_PROFILE.reports_dir
+SUMMARY_CSV_PATH = REPORTS_ROOT / "ai_narrative_summary.csv"
+SUMMARY_MD_PATH = REPORTS_ROOT / "ai_narrative_summary.md"
 GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
 PROMPT_VERSION = "underwriting-flood-context-v5"
 MAX_REQUESTS_PER_MINUTE = 30
@@ -393,6 +399,7 @@ class NarrativeGenerator:
         self,
         settings: Settings,
         *,
+        profile: ClientProfile | None = None,
         results_path: Path = RESULTS_PATH,
         policies_path: Path = POLICIES_PATH,
         output_path: Path = NARRATIVES_PATH,
@@ -402,7 +409,14 @@ class NarrativeGenerator:
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
     ):
+        if profile is not None:
+            results_path = profile.run_dir / "results_rowlevel.csv"
+            policies_path = profile.input_path
+            output_path = profile.run_dir / "narratives.jsonl"
+            cache_root = profile.run_dir / "cache" / "narratives"
+            daily_usage_path = cache_root / "daily_usage.json"
         self.settings = settings
+        self.profile = profile
         self.results_path = results_path
         self.policies_path = policies_path
         self.output_path = output_path
@@ -415,7 +429,12 @@ class NarrativeGenerator:
         self._token_usage: deque[tuple[float, int]] = deque()
 
     def _records(self, limit: int | None) -> list[tuple[dict[str, str], dict[str, str]]]:
-        policies = {row["policy_id"]: row for row in _read_csv(self.policies_path)}
+        policy_rows = (
+            read_client_policies(self.profile)
+            if self.profile is not None
+            else _read_csv(self.policies_path)
+        )
+        policies = {row["policy_id"]: row for row in policy_rows}
         results = _read_csv(self.results_path)
         records = []
         for result in results:
@@ -836,6 +855,7 @@ def run_narrative_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate evidence-limited narratives.")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true", help="Call Groq (requires typing YES).")
+    parser.add_argument("--profile", type=Path, default=None)
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -844,9 +864,16 @@ def run_narrative_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be at least 1")
-    settings = Settings.from_env()
+    profile = load_client_profile(args.profile)
+    if not profile.ai_enabled("narratives"):
+        print(
+            f"Narratives are disabled by client profile '{profile.data['client']['name']}'; "
+            "no narrative work was run."
+        )
+        return 0
+    settings = Settings.from_env(profile_path=args.profile)
     configure_logging(settings)
-    generator = NarrativeGenerator(settings)
+    generator = NarrativeGenerator(settings, profile=profile)
     if args.dry_run:
         counts = generator.dry_run(args.limit)
         print("Mode: DRY RUN (no network calls)")

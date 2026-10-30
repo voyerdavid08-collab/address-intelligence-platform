@@ -1,6 +1,8 @@
 import csv
 from decimal import Decimal
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 import yaml
@@ -15,6 +17,10 @@ from address_intelligence.config import ConfigError, Settings
 from address_intelligence.credits import PRICE_TABLE
 from address_intelligence.pipeline import StagedPipeline
 from address_intelligence.providers.precisely import ProviderResponse
+from address_intelligence.narrative import NarrativeGenerator
+from address_intelligence.metrics import build_before_after_report
+from address_intelligence.credits import CreditLedger
+from address_intelligence.workbook import build_workbooks
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -257,3 +263,170 @@ def test_environment_alpha_overrides_profile_value(tmp_path, monkeypatch):
     )
     assert settings.conformal_alpha == 0.07
     assert settings.remediation_samples == 3
+
+
+def _write_rows(path, columns, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as destination:
+        writer = csv.DictWriter(destination, fieldnames=columns, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_default_profile_paths_match_existing_locations():
+    profile = load_client_profile()
+    assert profile.run_dir == ROOT / "data" / "output" / "run"
+    assert profile.reports_dir == ROOT / "reports"
+    assert profile.ground_truth_path == ROOT / "data" / "input" / "ground_truth.csv"
+
+
+def test_profiles_separate_narrative_cache_for_same_policy_id(tmp_path):
+    path, input_path, data = _profile_fixture(tmp_path)
+    profile_one = load_client_profile(path, project_root=tmp_path)
+    data["output"]["run_dir"] = "data/output/second"
+    _write_yaml(path, data)
+    profile_two = load_client_profile(path, project_root=tmp_path)
+    settings = Settings(
+        api_key=None,
+        api_secret=None,
+        base_url="https://api.precisely.com",
+        credit_hard_cap=Decimal("100"),
+        trial_credits=Decimal("100"),
+        log_level="INFO",
+    )
+    first = NarrativeGenerator(settings, profile=profile_one)
+    second = NarrativeGenerator(settings, profile=profile_two)
+    assert first._cache_path("P-1", {}).parent != second._cache_path("P-1", {}).parent
+    assert first.cache_root == tmp_path / "data" / "output" / "run" / "cache" / "narratives"
+    assert second.cache_root == tmp_path / "data" / "output" / "second" / "cache" / "narratives"
+
+
+def test_run_dir_outside_data_output_is_rejected(tmp_path):
+    path, _, data = _profile_fixture(tmp_path)
+    data["output"]["run_dir"] = "../outside"
+    _write_yaml(path, data)
+    with pytest.raises(ConfigError, match="inside data/output"):
+        load_client_profile(path, project_root=tmp_path)
+
+
+def test_reports_dir_outside_allowed_locations_is_rejected(tmp_path):
+    path, _, data = _profile_fixture(tmp_path)
+    data["output"]["reports_dir"] = "../reports"
+    _write_yaml(path, data)
+    with pytest.raises(ConfigError, match="reports_dir"):
+        load_client_profile(path, project_root=tmp_path)
+
+
+def test_metrics_without_ground_truth_skips_accuracy_and_writes_remaining_sections(tmp_path):
+    input_path = tmp_path / "client.csv"
+    _write_rows(
+        input_path,
+        ["policy_id", "raw_address_line1", "raw_address_line2", "raw_city", "raw_state", "raw_zip5", "metro"],
+        [{
+            "policy_id": "P-1",
+            "raw_address_line1": "1 Oak St",
+            "raw_city": "Sample",
+            "raw_state": "TX",
+            "raw_zip5": "12345",
+        }],
+    )
+    profile_data = _read_yaml(DEFAULT_PROFILE_PATH)
+    profile_data["input"]["path"] = str(input_path)
+    profile_data["evaluation"] = {}
+    profile_data["output"]["run_dir"] = "data/output/client"
+    profile_data["output"]["reports_dir"] = "data/output/client/reports"
+    profile_path = tmp_path / "client_profile.yaml"
+    _write_yaml(profile_path, profile_data)
+    profile = load_client_profile(profile_path, project_root=tmp_path)
+    _write_rows(
+        profile.run_dir / "results_rowlevel.csv",
+        ["policy_id", "precision_code", "eligibility"],
+        [{"policy_id": "P-1", "precision_code": "S8", "eligibility": "eligible"}],
+    )
+    _write_rows(
+        profile.reports_dir / "ai_narrative_summary.csv",
+        ["status", "guardrail_reason", "count"],
+        [],
+    )
+    _write_rows(
+        profile.reports_dir / "remediation_calibration.csv",
+        ["metric", "value"],
+        [{"metric": "labelled_records", "value": "0"}, {"metric": "test_records", "value": "0"}],
+    )
+    _write_rows(
+        profile.reports_dir / "remediation_actions.csv",
+        ["metric", "value"],
+        [{"metric": "records", "value": "0"}],
+    )
+    report_rows = build_before_after_report(
+        profile=profile,
+        ledger=CreditLedger(Decimal("100")),
+    )
+    assert not any(row["section"] == "Standardization vs ground truth" for row in report_rows)
+    assert any(row["section"] == "Availability" and row["metric"].startswith("Not available:") for row in report_rows)
+    assert any(row["section"] == "Coordinate coverage" for row in report_rows)
+    assert (profile.reports_dir / "before_after_summary.csv").is_file()
+    assert (profile.reports_dir / "before_after_summary.md").is_file()
+
+
+def test_workbook_private_path_uses_profile_run_dir(tmp_path, monkeypatch):
+    path, input_path, data = _profile_fixture(tmp_path)
+    truth_path = tmp_path / "truth.csv"
+    _write_rows(
+        truth_path,
+        ["policy_id", "clean_address_line1", "clean_address_line2", "clean_city", "clean_zip5", "defects"],
+        [{"policy_id": "P-1", "clean_address_line1": "12 Sample Rd", "clean_zip5": "12345"}],
+    )
+    data["evaluation"]["ground_truth_path"] = str(truth_path)
+    data["output"]["reports_dir"] = "data/output/client/reports"
+    data["output"]["run_dir"] = "data/output/client"
+    _write_yaml(path, data)
+    profile = load_client_profile(path, project_root=tmp_path)
+    _write_rows(
+        profile.run_dir / "results_rowlevel.csv",
+        ["policy_id", "standardized_address_line1", "standardized_zip5"],
+        [{"policy_id": "P-1", "standardized_address_line1": "12 Sample Rd", "standardized_zip5": "12345"}],
+    )
+    _write_rows(
+        profile.reports_dir / "before_after_summary.csv",
+        ["section", "metric", "before", "after", "numerator", "denominator", "source"],
+        [],
+    )
+    written_paths = []
+    from address_intelligence import workbook
+
+    def capture(path, **kwargs):
+        written_paths.append(path)
+        return {"Raw": 1}
+
+    monkeypatch.setattr(workbook, "_write_workbook", capture)
+    build_workbooks(profile=profile)
+    assert profile.run_dir / "before_after_workbook_PRIVATE.xlsx" in written_paths
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "scripts/run_pipeline.py",
+        "scripts/metrics_report.py",
+        "scripts/build_workbook.py",
+        "scripts/evaluate_narratives.py",
+        "scripts/generate_narratives.py",
+        "scripts/remediate_exceptions.py",
+    ],
+)
+def test_profile_argument_parses_without_running_script(script):
+    result = subprocess.run(
+        [
+            sys.executable,
+            script,
+            "--profile",
+            "config/client_profile.yaml",
+            "--help",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

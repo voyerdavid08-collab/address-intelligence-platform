@@ -12,6 +12,12 @@ from typing import Any, Callable
 import requests
 
 from address_intelligence.config import Settings
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.credits import CreditLedger
 from address_intelligence.narrative import (
     GROQ_CHAT_COMPLETIONS_URL,
@@ -31,17 +37,18 @@ from address_intelligence.remediation import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RUN_ROOT = PROJECT_ROOT / "data" / "output" / "run"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+RUN_ROOT = _DEFAULT_PROFILE.run_dir
 RESULTS_PATH = RUN_ROOT / "results_rowlevel.csv"
-POLICIES_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
+POLICIES_PATH = _DEFAULT_PROFILE.input_path
 DIAGNOSIS_PATH = RUN_ROOT / "remediation_diagnosis.jsonl"
-GROUND_TRUTH_PATH = PROJECT_ROOT / "data" / "input" / "ground_truth.csv"
+GROUND_TRUTH_PATH = _DEFAULT_PROFILE.ground_truth_path
 OUTPUT_PATH = RUN_ROOT / "remediation_actions.jsonl"
 SUGGESTION_CACHE_ROOT = RUN_ROOT / "cache" / "remediation_suggestions"
 GEOCODE_CACHE_ROOT = RUN_ROOT / "cache" / "remediation_geocode_premium"
 DAILY_USAGE_PATH = RUN_ROOT / "cache" / "narratives" / "daily_usage.json"
-REPORT_MD_PATH = PROJECT_ROOT / "reports" / "remediation_actions.md"
-REPORT_CSV_PATH = PROJECT_ROOT / "reports" / "remediation_actions.csv"
+REPORT_MD_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_actions.md"
+REPORT_CSV_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_actions.csv"
 PROMPT_VERSION = "address-remediation-suggestion-v1"
 MAX_COMPLETION_TOKENS = 300
 SUGGESTION_FIELDS = frozenset({"street", "city", "zip5"})
@@ -229,11 +236,12 @@ class ExceptionActionWorkflow:
         settings: Settings,
         ledger: CreditLedger,
         *,
+        profile: ClientProfile | None = None,
         client: PreciselyClient | None = None,
         results_path: Path = RESULTS_PATH,
         policies_path: Path = POLICIES_PATH,
         diagnosis_path: Path = DIAGNOSIS_PATH,
-        ground_truth_path: Path = GROUND_TRUTH_PATH,
+        ground_truth_path: Path | None = GROUND_TRUTH_PATH,
         output_path: Path = OUTPUT_PATH,
         suggestion_cache_root: Path = SUGGESTION_CACHE_ROOT,
         geocode_cache_root: Path = GEOCODE_CACHE_ROOT,
@@ -244,7 +252,20 @@ class ExceptionActionWorkflow:
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
     ):
+        if profile is not None:
+            run_root = profile.run_dir
+            results_path = run_root / "results_rowlevel.csv"
+            policies_path = profile.input_path
+            diagnosis_path = run_root / "remediation_diagnosis.jsonl"
+            ground_truth_path = profile.ground_truth_path
+            output_path = run_root / "remediation_actions.jsonl"
+            suggestion_cache_root = run_root / "cache" / "remediation_suggestions"
+            geocode_cache_root = run_root / "cache" / "remediation_geocode_premium"
+            daily_usage_path = run_root / "cache" / "narratives" / "daily_usage.json"
+            report_md_path = profile.reports_dir / "remediation_actions.md"
+            report_csv_path = profile.reports_dir / "remediation_actions.csv"
         self.settings = settings
+        self.profile = profile
         self.ledger = ledger
         self.client = client
         self.results_path = results_path
@@ -270,9 +291,12 @@ class ExceptionActionWorkflow:
         )
 
     def _records(self) -> list[dict[str, Any]]:
-        policies = {
-            row["policy_id"]: row for row in _read_csv(self.policies_path)
-        }
+        policy_rows = (
+            read_client_policies(self.profile)
+            if self.profile is not None
+            else _read_csv(self.policies_path)
+        )
+        policies = {row["policy_id"]: row for row in policy_rows}
         diagnosis = {
             row["policy_id"]: row for row in _read_jsonl(self.diagnosis_path)
         }
@@ -962,13 +986,23 @@ def run_remediation_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--stage", choices=("suggest", "verify"), required=True)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--profile", type=Path, default=None)
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be at least 1")
-    settings = Settings.from_env()
+    profile = load_client_profile(args.profile)
+    if not profile.ai_enabled("remediation"):
+        print(
+            f"Remediation is disabled by client profile '{profile.data['client']['name']}'; "
+            "no remediation work was run."
+        )
+        return 0
+    settings = Settings.from_env(profile_path=args.profile)
     ledger = CreditLedger(settings.credit_hard_cap)
     client = PreciselyClient(settings, ledger, min_request_interval=2.0)
-    workflow = ExceptionActionWorkflow(settings, ledger, client=client)
+    workflow = ExceptionActionWorkflow(
+        settings, ledger, client=client, profile=profile
+    )
     counts = workflow.dry_run(args.stage, args.limit)
     print(f"Mode: {'EXECUTE' if args.execute else 'DRY RUN'}; stage: {args.stage}")
     print(

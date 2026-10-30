@@ -27,6 +27,8 @@ CANONICAL_COLUMNS = (
 TOP_LEVEL_KEYS = {
     "client",
     "input",
+    "output",
+    "evaluation",
     "verification",
     "enrichment",
     "comparison",
@@ -79,6 +81,24 @@ class ClientProfile:
     @property
     def input_path(self) -> Path:
         candidate = Path(self.data["input"]["path"])
+        return candidate if candidate.is_absolute() else self.project_root / candidate
+
+    @property
+    def run_dir(self) -> Path:
+        candidate = Path(self.data["output"]["run_dir"])
+        return candidate if candidate.is_absolute() else self.project_root / candidate
+
+    @property
+    def reports_dir(self) -> Path:
+        candidate = Path(self.data["output"]["reports_dir"])
+        return candidate if candidate.is_absolute() else self.project_root / candidate
+
+    @property
+    def ground_truth_path(self) -> Path | None:
+        value = self.data.get("evaluation", {}).get("ground_truth_path")
+        if value is None:
+            return None
+        candidate = Path(value)
         return candidate if candidate.is_absolute() else self.project_root / candidate
 
     @property
@@ -141,9 +161,12 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
     unknown = set(data) - TOP_LEVEL_KEYS
     if unknown:
         raise _config_error(f"Unknown client profile key(s): {', '.join(sorted(unknown))}.")
-    missing_top = TOP_LEVEL_KEYS - set(data)
+    missing_top = (TOP_LEVEL_KEYS - {"evaluation"}) - set(data)
     if missing_top:
         raise _config_error(f"Missing client profile section(s): {', '.join(sorted(missing_top))}.")
+    data.setdefault("evaluation", {})
+    if not isinstance(data["evaluation"], dict):
+        raise _config_error("evaluation must be a mapping.")
     try:
         client = data["client"]
         if not isinstance(client["name"], str) or not client["name"].strip():
@@ -166,6 +189,11 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
             raise _config_error("input.id_column must match input.column_mapping.policy_id.")
         if not isinstance(input_config["path"], str) or not input_config["path"]:
             raise _config_error("input.path must be a non-empty path.")
+        output = data["output"]
+        if not isinstance(output["run_dir"], str) or not output["run_dir"]:
+            raise _config_error("output.run_dir must be a non-empty path.")
+        if not isinstance(output["reports_dir"], str) or not output["reports_dir"]:
+            raise _config_error("output.reports_dir must be a non-empty path.")
         prefixes = data["verification"]["eligible_precision_prefixes"]
         if not isinstance(prefixes, list) or not prefixes or not all(
             isinstance(prefix, str) and prefix for prefix in prefixes
@@ -235,6 +263,25 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
         raise _config_error(f"Invalid client profile value: {exc}.") from None
 
     profile = ClientProfile(profile_path, project_root, data)
+    output_root = (project_root / "data" / "output").resolve()
+    try:
+        profile.run_dir.resolve().relative_to(output_root)
+    except ValueError:
+        raise _config_error("output.run_dir must resolve inside data/output/.") from None
+    reports_path = profile.reports_dir.resolve()
+    if reports_path != (project_root / "reports").resolve():
+        try:
+            reports_path.relative_to(output_root)
+        except ValueError:
+            raise _config_error(
+                "output.reports_dir must be exactly 'reports' or resolve inside data/output/."
+            ) from None
+    evaluation = data["evaluation"]
+    ground_truth = evaluation.get("ground_truth_path")
+    if ground_truth is not None and (
+        not isinstance(ground_truth, str) or not ground_truth.strip()
+    ):
+        raise _config_error("evaluation.ground_truth_path must be a path or null.")
     if not profile.input_path.is_file():
         raise _config_error(f"Client input file does not exist: {profile.input_path}.")
     try:
@@ -268,7 +315,35 @@ def load_client_profile(
         raise _config_error(f"Unable to read client profile '{path}': {exc}.") from None
     except yaml.YAMLError as exc:
         raise _config_error(f"Unable to parse client profile '{path}': {exc}.") from None
-    return _validate_profile(data, path, root)
+    profile = _validate_profile(data, path, root)
+    _warn_if_run_dir_shared(profile)
+    return profile
+
+
+def _warn_if_run_dir_shared(profile: ClientProfile) -> None:
+    config_root = profile.project_root / "config"
+    if not config_root.is_dir():
+        return
+    target = profile.run_dir.resolve()
+    for candidate in config_root.rglob("*.yaml"):
+        if candidate.resolve() == profile.path.resolve():
+            continue
+        try:
+            with candidate.open(encoding="utf-8") as source:
+                data = yaml.safe_load(source)
+            run_dir = data.get("output", {}).get("run_dir") if isinstance(data, dict) else None
+            if not isinstance(run_dir, str):
+                continue
+            other = Path(run_dir)
+            other = other if other.is_absolute() else profile.project_root / other
+            if other.resolve() == target:
+                print(
+                    f"Warning: client profiles '{profile.path}' and '{candidate}' "
+                    f"share run_dir '{target}'."
+                )
+                return
+        except (OSError, yaml.YAMLError):
+            continue
 
 
 def read_client_policies(profile: ClientProfile) -> list[dict[str, str]]:

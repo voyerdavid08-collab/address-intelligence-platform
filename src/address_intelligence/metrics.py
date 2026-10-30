@@ -9,6 +9,12 @@ import statistics
 from typing import Iterable
 
 from address_intelligence.credits import CreditLedger
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.flood import flood_zone_base, risk_tier
 from address_intelligence.remediation_actions import (
     _normalize_city,
@@ -17,14 +23,15 @@ from address_intelligence.remediation_actions import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INPUT_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
-GROUND_TRUTH_PATH = PROJECT_ROOT / "data" / "input" / "ground_truth.csv"
-RESULTS_PATH = PROJECT_ROOT / "data" / "output" / "run" / "results_rowlevel.csv"
-NARRATIVE_REPORT_PATH = PROJECT_ROOT / "reports" / "ai_narrative_summary.csv"
-CALIBRATION_REPORT_PATH = PROJECT_ROOT / "reports" / "remediation_calibration.csv"
-ACTIONS_REPORT_PATH = PROJECT_ROOT / "reports" / "remediation_actions.csv"
-CSV_OUTPUT_PATH = PROJECT_ROOT / "reports" / "before_after_summary.csv"
-MD_OUTPUT_PATH = PROJECT_ROOT / "reports" / "before_after_summary.md"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+INPUT_PATH = _DEFAULT_PROFILE.input_path
+GROUND_TRUTH_PATH = _DEFAULT_PROFILE.ground_truth_path
+RESULTS_PATH = _DEFAULT_PROFILE.run_dir / "results_rowlevel.csv"
+NARRATIVE_REPORT_PATH = _DEFAULT_PROFILE.reports_dir / "ai_narrative_summary.csv"
+CALIBRATION_REPORT_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_calibration.csv"
+ACTIONS_REPORT_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_actions.csv"
+CSV_OUTPUT_PATH = _DEFAULT_PROFILE.reports_dir / "before_after_summary.csv"
+MD_OUTPUT_PATH = _DEFAULT_PROFILE.reports_dir / "before_after_summary.md"
 OUTPUT_COLUMNS = (
     "section",
     "metric",
@@ -404,9 +411,20 @@ def compute_before_after_metrics(
     *,
     ledger: CreditLedger | None = None,
     dashboard_credits_left: float | None = None,
+    profile: ClientProfile | None = None,
 ) -> list[dict[str, str]]:
-    policies = _read_csv(input_path)
-    truths = _read_csv(ground_truth_path)
+    if profile is not None:
+        input_path = profile.input_path
+        ground_truth_path = profile.ground_truth_path
+        results_path = profile.run_dir / "results_rowlevel.csv"
+        narrative_report_path = profile.reports_dir / "ai_narrative_summary.csv"
+        calibration_report_path = profile.reports_dir / "remediation_calibration.csv"
+        actions_report_path = profile.reports_dir / "remediation_actions.csv"
+        policies = read_client_policies(profile)
+    else:
+        policies = _read_csv(input_path)
+    has_ground_truth = ground_truth_path is not None
+    truths = _read_csv(ground_truth_path) if has_ground_truth else []
     results = _read_csv(results_path)
     truth_by_id = {row["policy_id"]: row for row in truths}
     result_by_id = {row["policy_id"]: row for row in results}
@@ -504,15 +522,19 @@ def compute_before_after_metrics(
         for policy in policies
         if policy["policy_id"] in truth_by_id
     ]
-    correctness_groups: dict[str, list[tuple[dict[str, str], dict[str, str], dict[str, str] | None]]] = {
-        "all records": paired,
-        "clean records": [
-            item for item in paired if not (item[1].get("defects") or "").strip()
-        ],
-        "dirty records": [
-            item for item in paired if (item[1].get("defects") or "").strip()
-        ],
-    }
+    correctness_groups: dict[str, list[tuple[dict[str, str], dict[str, str], dict[str, str] | None]]] = (
+        {
+            "all records": paired,
+            "clean records": [
+                item for item in paired if not (item[1].get("defects") or "").strip()
+            ],
+            "dirty records": [
+                item for item in paired if (item[1].get("defects") or "").strip()
+            ],
+        }
+        if has_ground_truth
+        else {}
+    )
     defect_types = sorted(
         {
             label.strip()
@@ -591,12 +613,16 @@ def compute_before_after_metrics(
             )
         )
 
-    city_groups = {
-        "all records": paired,
-        "clean records": correctness_groups["clean records"],
-        "dirty records": correctness_groups["dirty records"],
-        "defect: city_typo": correctness_groups.get("defect: city_typo", []),
-    }
+    city_groups = (
+        {
+            "all records": paired,
+            "clean records": correctness_groups["clean records"],
+            "dirty records": correctness_groups["dirty records"],
+            "defect: city_typo": correctness_groups.get("defect: city_typo", []),
+        }
+        if has_ground_truth
+        else {}
+    )
     for group_name, group in city_groups.items():
         before_count = sum(
             _canonical_city(policy.get("raw_city"))
@@ -621,7 +647,11 @@ def compute_before_after_metrics(
             )
         )
 
-    for group_name in ("all records", "clean records", "dirty records"):
+    for group_name in (
+        ("all records", "clean records", "dirty records")
+        if has_ground_truth
+        else ()
+    ):
         group = correctness_groups[group_name]
         before_count = sum(
             _correct_street_city(
@@ -652,6 +682,21 @@ def compute_before_after_metrics(
                 before=_format_proportion(before_count, len(group)),
                 after=_format_proportion(after_count, len(group)),
             )
+        )
+    if not has_ground_truth:
+        rows.append(
+            {
+                "section": "Availability",
+                "metric": (
+                    "Not available: no reference data supplied for this client. "
+                    "Accuracy against a reference needs a labelled sample."
+                ),
+                "before": "n/a",
+                "after": "n/a",
+                "numerator": "",
+                "denominator": "",
+                "source": "input",
+            }
         )
 
     building_coordinates = sum(
@@ -951,7 +996,17 @@ def build_before_after_report(
     csv_path: Path = CSV_OUTPUT_PATH,
     markdown_path: Path = MD_OUTPUT_PATH,
     ledger: CreditLedger | None = None,
+    profile: ClientProfile | None = None,
 ) -> list[dict[str, str]]:
+    if profile is not None:
+        input_path = profile.input_path
+        ground_truth_path = profile.ground_truth_path
+        results_path = profile.run_dir / "results_rowlevel.csv"
+        narrative_report_path = profile.reports_dir / "ai_narrative_summary.csv"
+        calibration_report_path = profile.reports_dir / "remediation_calibration.csv"
+        actions_report_path = profile.reports_dir / "remediation_actions.csv"
+        csv_path = profile.reports_dir / "before_after_summary.csv"
+        markdown_path = profile.reports_dir / "before_after_summary.md"
     rows = compute_before_after_metrics(
         input_path,
         ground_truth_path,
@@ -961,12 +1016,17 @@ def build_before_after_report(
         actions_report_path,
         ledger=ledger,
         dashboard_credits_left=dashboard_credits_left,
+        profile=profile,
+    )
+    source_policies = (
+        read_client_policies(profile) if profile is not None else _read_csv(input_path)
     )
     address_values = {
         value.strip()
-        for policy in _read_csv(input_path)
+        for policy in source_policies
         for key, value in policy.items()
-        if key.startswith("raw_") and value.strip()
+        if (key.startswith("raw_") or key in {"city", "state", "zip5"})
+        and value.strip()
     }
     write_before_after_report(rows, csv_path, markdown_path, address_values)
     return rows
@@ -977,15 +1037,21 @@ def main(argv: list[str] | None = None) -> int:
         description="Build aggregate-only before/after address-intelligence metrics."
     )
     parser.add_argument("--dashboard-credits-left", type=float)
+    parser.add_argument("--profile", type=Path, default=None)
     args = parser.parse_args(argv)
+    profile = load_client_profile(args.profile)
     rows = build_before_after_report(
-        dashboard_credits_left=args.dashboard_credits_left
+        dashboard_credits_left=args.dashboard_credits_left,
+        profile=profile,
     )
     sections: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         sections.setdefault(row["section"], []).append(row)
     print("aggregates only; row-level Precisely outputs are not published (AUP §4.1–4.2)")
-    print("Wrote reports/before_after_summary.csv and reports/before_after_summary.md.")
+    print(
+        f"Wrote {profile.reports_dir / 'before_after_summary.csv'} and "
+        f"{profile.reports_dir / 'before_after_summary.md'}."
+    )
     for section, section_rows in sections.items():
         print(f"\n[{section}]")
         for row in section_rows:

@@ -15,6 +15,12 @@ import warnings
 import requests
 
 from address_intelligence.config import Settings
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.narrative import (
     CACHE_ROOT as NARRATIVE_CACHE_ROOT,
     DAILY_USAGE_PATH as NARRATIVE_DAILY_USAGE_PATH,
@@ -29,15 +35,16 @@ from address_intelligence.narrative import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RUN_ROOT = PROJECT_ROOT / "data" / "output" / "run"
-POLICIES_PATH = PROJECT_ROOT / "data" / "input" / "policyholders_synthetic.csv"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+RUN_ROOT = _DEFAULT_PROFILE.run_dir
+POLICIES_PATH = _DEFAULT_PROFILE.input_path
 RESULTS_PATH = RUN_ROOT / "results_rowlevel.csv"
-GROUND_TRUTH_PATH = PROJECT_ROOT / "data" / "input" / "ground_truth.csv"
+GROUND_TRUTH_PATH = _DEFAULT_PROFILE.ground_truth_path
 GEOCODE_CACHE_ROOT = RUN_ROOT / "cache" / "geocode_premium_structured"
 REMEDIATION_OUTPUT_PATH = RUN_ROOT / "remediation_diagnosis.jsonl"
 REMEDIATION_CACHE_ROOT = RUN_ROOT / "cache" / "remediation"
-REPORT_MD_PATH = PROJECT_ROOT / "reports" / "remediation_calibration.md"
-REPORT_CSV_PATH = PROJECT_ROOT / "reports" / "remediation_calibration.csv"
+REPORT_MD_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_calibration.md"
+REPORT_CSV_PATH = _DEFAULT_PROFILE.reports_dir / "remediation_calibration.csv"
 PROMPT_VERSION = "address-cause-diagnosis-v4"
 RANDOM_SEED = 42
 MAX_COMPLETION_TOKENS = 300
@@ -377,9 +384,10 @@ class RemediationDiagnoser:
         self,
         settings: Settings,
         *,
+        profile: ClientProfile | None = None,
         policies_path: Path = POLICIES_PATH,
         results_path: Path = RESULTS_PATH,
-        ground_truth_path: Path = GROUND_TRUTH_PATH,
+        ground_truth_path: Path | None = GROUND_TRUTH_PATH,
         geocode_cache_root: Path = GEOCODE_CACHE_ROOT,
         output_path: Path = REMEDIATION_OUTPUT_PATH,
         cache_root: Path = REMEDIATION_CACHE_ROOT,
@@ -390,7 +398,19 @@ class RemediationDiagnoser:
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
     ):
+        if profile is not None:
+            run_root = profile.run_dir
+            policies_path = profile.input_path
+            results_path = run_root / "results_rowlevel.csv"
+            ground_truth_path = profile.ground_truth_path
+            geocode_cache_root = run_root / "cache" / "geocode_premium_structured"
+            output_path = run_root / "remediation_diagnosis.jsonl"
+            cache_root = run_root / "cache" / "remediation"
+            daily_usage_path = run_root / "cache" / "narratives" / "daily_usage.json"
+            report_md_path = profile.reports_dir / "remediation_calibration.md"
+            report_csv_path = profile.reports_dir / "remediation_calibration.csv"
         self.settings = settings
+        self.profile = profile
         self.policies_path = policies_path
         self.results_path = results_path
         self.ground_truth_path = ground_truth_path
@@ -406,7 +426,11 @@ class RemediationDiagnoser:
         self._api_calls = 0
         self._pacing = NarrativeGenerator(
             settings,
-            cache_root=NARRATIVE_CACHE_ROOT,
+            cache_root=(
+                profile.run_dir / "cache" / "narratives"
+                if profile is not None
+                else NARRATIVE_CACHE_ROOT
+            ),
             daily_usage_path=daily_usage_path,
             post=post,
             clock=clock,
@@ -414,9 +438,12 @@ class RemediationDiagnoser:
         )
 
     def records(self) -> tuple[list[dict[str, Any]], int]:
-        policies = {
-            row["policy_id"]: row for row in _read_csv(self.policies_path)
-        }
+        policy_rows = (
+            read_client_policies(self.profile)
+            if self.profile is not None
+            else _read_csv(self.policies_path)
+        )
+        policies = {row["policy_id"]: row for row in policy_rows}
         results = {row["policy_id"]: row for row in _read_csv(self.results_path)}
         labeled: list[dict[str, Any]] = []
         excluded_missing_unit = 0
@@ -932,15 +959,25 @@ def run_diagnosis_cli(argv: list[str] | None = None) -> int:
         description="Sample address exception causes and calibrate prediction sets."
     )
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--profile", type=Path, default=None)
     parser.add_argument(
         "--execute", action="store_true", help="Call Groq (requires typing YES)."
     )
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be at least 1")
+    profile = load_client_profile(args.profile)
+    if not profile.ai_enabled("remediation"):
+        print(
+            f"Remediation is disabled by client profile '{profile.data['client']['name']}'; "
+            "no remediation work was run."
+        )
+        return 0
     from address_intelligence.config import Settings
 
-    diagnoser = RemediationDiagnoser(Settings.from_env())
+    diagnoser = RemediationDiagnoser(
+        Settings.from_env(profile_path=args.profile), profile=profile
+    )
     counts = diagnoser.dry_run(args.limit)
     if not args.execute:
         print("Mode: DRY RUN (no network calls)")

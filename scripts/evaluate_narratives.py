@@ -4,7 +4,14 @@ import csv
 import json
 from pathlib import Path
 import random
+import argparse
 
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.narrative import (
     NARRATIVES_PATH,
     POLICIES_PATH,
@@ -14,10 +21,11 @@ from address_intelligence.narrative import (
 )
 
 
-REPORTS_ROOT = PROJECT_ROOT / "reports"
+_DEFAULT_PROFILE = load_client_profile(DEFAULT_PROFILE_PATH)
+REPORTS_ROOT = _DEFAULT_PROFILE.reports_dir
 SUMMARY_CSV_PATH = REPORTS_ROOT / "ai_narrative_summary.csv"
 SUMMARY_MD_PATH = REPORTS_ROOT / "ai_narrative_summary.md"
-REVIEW_SHEET_PATH = PROJECT_ROOT / "data" / "output" / "run" / "narrative_review_sheet.csv"
+REVIEW_SHEET_PATH = _DEFAULT_PROFILE.run_dir / "narrative_review_sheet.csv"
 REVIEW_SEED = 20261029
 
 
@@ -26,19 +34,36 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(source))
 
 
-def evaluate_narratives() -> dict[tuple[str, str], int]:
-    if not NARRATIVES_PATH.exists():
+def evaluate_narratives(
+    profile: ClientProfile | None = None,
+) -> dict[tuple[str, str], int]:
+    narratives_path = (
+        profile.run_dir / "narratives.jsonl" if profile else NARRATIVES_PATH
+    )
+    policies_path = profile.input_path if profile else POLICIES_PATH
+    results_path = (
+        profile.run_dir / "results_rowlevel.csv" if profile else RESULTS_PATH
+    )
+    reports_root = profile.reports_dir if profile else REPORTS_ROOT
+    summary_csv_path = reports_root / "ai_narrative_summary.csv"
+    summary_md_path = reports_root / "ai_narrative_summary.md"
+    review_sheet_path = (
+        profile.run_dir / "narrative_review_sheet.csv"
+        if profile
+        else REVIEW_SHEET_PATH
+    )
+    if not narratives_path.exists():
         narratives = []
     else:
-        with NARRATIVES_PATH.open(encoding="utf-8") as source:
+        with narratives_path.open(encoding="utf-8") as source:
             narratives = [json.loads(line) for line in source if line.strip()]
     counts: dict[tuple[str, str], int] = {}
     for row in narratives:
         key = (row.get("status", ""), row.get("guardrail_reason", ""))
         counts[key] = counts.get(key, 0) + 1
 
-    REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
-    with SUMMARY_CSV_PATH.open("w", newline="", encoding="utf-8") as destination:
+    reports_root.mkdir(parents=True, exist_ok=True)
+    with summary_csv_path.open("w", newline="", encoding="utf-8") as destination:
         writer = csv.DictWriter(
             destination,
             fieldnames=("status", "guardrail_reason", "count"),
@@ -64,20 +89,31 @@ def evaluate_narratives() -> dict[tuple[str, str], int]:
         )
     else:
         lines.append("| (none) | (none) | 0 |")
-    SUMMARY_MD_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    _write_review_sheet(narratives)
+    summary_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_review_sheet(narratives, profile, policies_path, results_path, review_sheet_path)
     return counts
 
 
-def _write_review_sheet(narratives: list[dict[str, object]]) -> None:
+def _write_review_sheet(
+    narratives: list[dict[str, object]],
+    profile: ClientProfile | None = None,
+    policies_path: Path = POLICIES_PATH,
+    results_path: Path = RESULTS_PATH,
+    review_sheet_path: Path = REVIEW_SHEET_PATH,
+) -> None:
     generated = [row for row in narratives if row.get("status") == "generated"]
     generated.sort(key=lambda row: str(row.get("policy_id", "")))
     sample = random.Random(REVIEW_SEED).sample(
         generated, min(10, len(generated))
     )
-    policies = {row["policy_id"]: row for row in _read_csv(POLICIES_PATH)}
-    results = {row["policy_id"]: row for row in _read_csv(RESULTS_PATH)}
-    REVIEW_SHEET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    policies = {
+        row["policy_id"]: row
+        for row in (
+            read_client_policies(profile) if profile is not None else _read_csv(policies_path)
+        )
+    }
+    results = {row["policy_id"]: row for row in _read_csv(results_path)}
+    review_sheet_path.parent.mkdir(parents=True, exist_ok=True)
     columns = (
         "policy_id",
         "narrative",
@@ -89,7 +125,7 @@ def _write_review_sheet(narratives: list[dict[str, object]]) -> None:
         "clear_to_underwriter 1–5",
         "notes",
     )
-    with REVIEW_SHEET_PATH.open("w", newline="", encoding="utf-8") as destination:
+    with review_sheet_path.open("w", newline="", encoding="utf-8") as destination:
         writer = csv.DictWriter(destination, fieldnames=columns)
         writer.writeheader()
         for row in sample:
@@ -113,4 +149,7 @@ def _write_review_sheet(narratives: list[dict[str, object]]) -> None:
 
 
 if __name__ == "__main__":
-    evaluate_narratives()
+    parser = argparse.ArgumentParser(description="Evaluate locally generated narratives.")
+    parser.add_argument("--profile", type=Path, default=None)
+    args = parser.parse_args()
+    evaluate_narratives(load_client_profile(args.profile))
