@@ -100,6 +100,16 @@ def _normalize_street(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper())
 
 
+def _normalize_verified_street(value: str) -> str:
+    without_unit = re.sub(
+        r"(?:\b(?:APT|APARTMENT|UNIT|STE|SUITE)\b|#).*$",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return _normalize_street(without_unit)
+
+
 def _normalize_city(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", value.upper())
 
@@ -172,10 +182,7 @@ def validate_suggestion(
     if not set(changed).issubset(SUGGESTION_FIELDS) or len(changed) != len(set(changed)):
         raise ValueError("invalid changed_fields")
     if len(suggestion["rationale"]) > 200:
-        raise ValueError("rationale exceeds 200 characters")
-    if not _ZIP_PATTERN.fullmatch(suggestion["zip5"]):
-        raise ValueError("zip5 must contain exactly five digits")
-
+        suggestion["rationale"] = suggestion["rationale"][:199] + "…"
     original = {
         "street": policy.get("raw_address_line1", ""),
         "city": policy.get("raw_city", ""),
@@ -189,7 +196,11 @@ def validate_suggestion(
     actual_changes = {
         field for field in SUGGESTION_FIELDS if proposed[field] != original[field]
     }
-    if actual_changes != set(changed):
+    if not changed or not actual_changes:
+        raise NoSuggestion("no address changes proposed")
+    if not _ZIP_PATTERN.fullmatch(suggestion["zip5"]):
+        raise ValueError("zip5 must contain exactly five digits")
+    if not actual_changes.issubset(set(changed)):
         raise ValueError("changed_fields do not match changed address fields")
     available_causes = {cause for cause in shortlist if cause in CAUSE_TO_FIELD}
     allowed_changes = {CAUSE_TO_FIELD[cause] for cause in available_causes}
@@ -338,11 +349,9 @@ class ExceptionActionWorkflow:
             if not self._has_plausible_change(record):
                 continue
             if stage == "suggest":
-                if self._suggestion_cache_path(record).exists():
-                    continue
-                estimate = _token_estimate(_request_messages(record["model_input"]))
-                groq_calls += 1
-                estimated_tokens += estimate + MAX_COMPLETION_TOKENS
+                # This stage only revalidates existing responses; absent cache
+                # entries remain failed and are never sent to Groq here.
+                continue
             else:
                 verify_calls += 1
         missing_suggest_records = False
@@ -413,24 +422,13 @@ class ExceptionActionWorkflow:
         return summary
 
     def suggest(self, limit: int | None = None) -> dict[str, Any]:
-        if not self.settings.groq_api_key:
-            raise ValueError("GROQ_API_KEY is required for suggestion execution.")
         records = self._records()
         if limit is not None:
             records = records[:limit]
-        today = datetime.now(timezone.utc).date().isoformat()
-        tokens_used = _load_daily_usage(
-            self.daily_usage_path,
-            today,
-            self.settings.remediation_model,
-            legacy_model=self.settings.groq_model,
-        )
-        tokens_before = tokens_used
         prior = {
             row["policy_id"]: row for row in _read_jsonl(self.output_path)
         }
         actions = []
-        calls = 0
         for record in records:
             existing = prior.get(record["policy_id"], {})
             action_row = {
@@ -452,46 +450,42 @@ class ExceptionActionWorkflow:
                     "resubmit for verification."
                 )
                 action_row["evaluation"] = self._evaluate_outreach(record)
-            elif existing.get("suggestion"):
-                action_row.update(existing)
             elif not self._has_plausible_change(record):
                 action_row["suggestion_status"] = "no_suggestion"
             else:
-                try:
-                    response_data, provenance = self._suggestion_response(
-                        record, tokens_used
+                cache_path = self._suggestion_cache_path(record)
+                if not cache_path.exists():
+                    action_row["suggestion_status"] = "failed"
+                    action_row["suggestion_reason"] = (
+                        existing.get("suggestion_reason")
+                        or "cached suggestion unavailable"
                     )
-                except DailyBudgetReached:
-                    action_row["suggestion_status"] = "failed"
-                    action_row["suggestion_reason"] = "daily token budget reached"
-                except NarrativeAPIError as error:
-                    action_row["suggestion_status"] = "failed"
-                    action_row["suggestion_reason"] = error.reason
                 else:
-                    if provenance == "api":
-                        tokens_used += response_data["tokens"]
-                        _write_daily_usage(
-                            self.daily_usage_path,
-                            today,
-                            self.settings.remediation_model,
-                            tokens_used,
-                            legacy_model=self.settings.groq_model,
-                        )
-                        calls += 1
+                    response_data = json.loads(cache_path.read_text(encoding="utf-8"))
                     action_row["model_reported"] = response_data["model_reported"]
+                    content = response_data["content"]
                     try:
                         suggestion = validate_suggestion(
-                            response_data["content"],
+                            content,
                             record["policy"],
                             record["cause_shortlist"],
                         )
+                    except NoSuggestion:
+                        action_row["suggestion_status"] = "no_suggestion"
+                        action_row["evaluation"] = {"no_suggestion": True}
                     except ValueError as error:
                         action_row["suggestion_status"] = "rejected"
                         action_row["suggestion_reason"] = str(error)
+                        action_row["rejected_suggestion"] = content
                     else:
                         action_row["suggestion"] = suggestion
                         action_row["suggestion_status"] = "suggested, unverified"
                         action_row["suggestion_label"] = "suggested, unverified"
+                        action_row["evaluation"] = {
+                            "suggestion_exact_match": self._suggestion_exact_match(
+                                record, suggestion
+                            )
+                        }
             actions.append(action_row)
 
         action_by_id = dict(prior)
@@ -503,8 +497,8 @@ class ExceptionActionWorkflow:
             {
                 "run_mode": "suggest execution",
                 "stage": "suggest",
-                "groq_calls": calls,
-                "tokens_used": tokens_used - tokens_before,
+                "groq_calls": 0,
+                "tokens_used": 0,
             }
         )
         self._write_reports(summary)
@@ -748,6 +742,18 @@ class ExceptionActionWorkflow:
             "customer_outreach_correct": "house_number_issue" in truth,
         }
 
+    def _suggestion_exact_match(
+        self, record: dict[str, Any], suggestion: dict[str, Any]
+    ) -> bool:
+        clean = self._ground_truth_row(record["policy_id"])
+        return (
+            _normalize_street(suggestion["line1"])
+            == _normalize_street(clean.get("clean_address_line1", ""))
+            and _normalize_city(suggestion["city"])
+            == _normalize_city(clean.get("clean_city", ""))
+            and suggestion["zip5"].strip() == clean.get("clean_zip5", "").strip()
+        )
+
     def _ground_truth(self) -> dict[str, set[str]]:
         return {
             row["policy_id"]: _truth_labels(row.get("defects", ""))
@@ -761,14 +767,20 @@ class ExceptionActionWorkflow:
         response: ProviderResponse | None,
     ) -> dict[str, Any]:
         truth = self._ground_truth().get(record["policy_id"], set())
+        evaluation = dict(action.get("evaluation", {}))
         if action["action"] == "customer_outreach":
-            return {"customer_outreach_correct": "house_number_issue" in truth}
+            evaluation["customer_outreach_correct"] = (
+                "house_number_issue" in truth
+            )
+            return evaluation
         if action.get("suggestion_status") == "no_suggestion":
-            return {"no_suggestion": True}
+            evaluation["no_suggestion"] = True
+            return evaluation
         if action.get("suggestion_status") != "suggested, unverified":
-            return {}
+            return evaluation
         if response is None:
-            return {"not_verified": True}
+            evaluation["not_verified"] = True
+            return evaluation
         candidate = _candidate(response.data)
         address = candidate.get("address", {}) if candidate else {}
         line1 = (
@@ -780,16 +792,15 @@ class ExceptionActionWorkflow:
         zip5 = address.get("postCode1", "") if isinstance(address, dict) else ""
         clean = self._ground_truth_row(record["policy_id"])
         correct = (
-            _normalize_street(str(line1))
-            == _normalize_street(clean.get("clean_address_line1", ""))
+            _normalize_verified_street(str(line1))
+            == _normalize_verified_street(clean.get("clean_address_line1", ""))
             and _normalize_city(str(city))
             == _normalize_city(clean.get("clean_city", ""))
             and str(zip5).strip() == clean.get("clean_zip5", "").strip()
         )
-        return {
-            "verified_correct": correct,
-            "verified_incorrect": not correct,
-        }
+        evaluation["verified_correct"] = correct
+        evaluation["verified_incorrect"] = not correct
+        return evaluation
 
     def _ground_truth_row(self, policy_id: str) -> dict[str, str]:
         for row in _read_csv(self.ground_truth_path):
@@ -934,6 +945,10 @@ class ExceptionActionWorkflow:
 
 class DailyBudgetReached(Exception):
     """Internal stop signal when the per-model daily budget is exhausted."""
+
+
+class NoSuggestion(ValueError):
+    """Raised when a response proposes no actual address changes."""
 
 
 def run_remediation_cli(argv: list[str] | None = None) -> int:

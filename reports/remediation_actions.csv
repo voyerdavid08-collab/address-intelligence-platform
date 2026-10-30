@@ -1,24 +1,29 @@
 metric,value
-run_status,dry-run planning only
+run_status,verification execution
 stage,verify
 records,30
-suggestions_made,0
-suggestions_valid,0
-suggestions_rejected,0
-verified,0
-verified_correct,0
+suggestions_made,10
+suggestions_valid,9
+suggestions_rejected,1
+verified,6
+verified_correct,6
 verified_incorrect,0
-not_verified,0
-no_suggestion,0
-customer_outreach_correct,0
+not_verified,3
+no_suggestion,5
+customer_outreach_correct,14
 credits_used,0
 tokens_used,0
 groq_calls,0
 precisely_calls,0
 estimated_tokens,0
 planned_groq_calls,0
-planned_precisely_calls,16
-planned_precisely_credits,16
-action_customer_outreach,14
+planned_precisely_calls,0
+planned_precisely_credits,0
 action_analyst_review,16
-action_verification_pending,16
+"action_suggestion_suggested, unverified",9
+action_customer_outreach,14
+action_suggestion_not_requested,14
+action_suggestion_failed,1
+action_suggestion_no_suggestion,5
+action_suggestion_rejected,1
+rejected_house number cannot be added or changed,1

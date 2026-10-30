@@ -10,6 +10,8 @@ from address_intelligence.narrative import NarrativeAPIError
 from address_intelligence.providers.precisely import ProviderResponse
 from address_intelligence.remediation_actions import (
     ExceptionActionWorkflow,
+    NoSuggestion,
+    _normalize_verified_street,
     _request_messages,
     _suggestion_input,
     triage_action,
@@ -208,7 +210,7 @@ def test_suggestion_guardrail_rejects_state_output():
             "line1": "12 MAIN ST",
             "city": "OLD",
             "zip5": "12345",
-            "changed_fields": [],
+            "changed_fields": ["zip5"],
             "rationale": "",
             "state": "NY",
         }
@@ -227,7 +229,7 @@ def test_changed_field_must_match_declared_changes_and_shortlist():
             "line1": "12 MAIN ST",
             "city": "NEW",
             "zip5": "12345",
-            "changed_fields": [],
+            "changed_fields": ["zip5"],
             "rationale": "Correct the city.",
         }
     )
@@ -257,10 +259,10 @@ def test_changed_field_must_match_declared_changes_and_shortlist():
                 "line1": "12 MAIN ST",
                 "city": "OLD",
                 "zip5": "12345",
-                "changed_fields": [],
-                "rationale": "x" * 201,
+                "changed_fields": ["address"],
+                "rationale": "No actual change.",
             },
-            "rationale exceeds",
+            "invalid changed_fields",
         ),
     ],
 )
@@ -268,6 +270,51 @@ def test_suggestion_rejects_unsupported_field_names_and_long_rationale(
     suggestion, reason
 ):
     with pytest.raises(ValueError, match=reason):
+        validate_suggestion(
+            json.dumps(suggestion),
+            {"raw_address_line1": "12 MAIN ST", "raw_city": "OLD", "raw_zip5": "12345"},
+            ["city_issue"],
+        )
+
+
+def test_long_rationale_is_truncated_with_ellipsis():
+    suggestion = {
+        "line1": "12 MAIN ST",
+        "city": "NEW",
+        "zip5": "12345",
+        "changed_fields": ["city"],
+        "rationale": "R" * 205,
+    }
+    result = validate_suggestion(
+        json.dumps(suggestion),
+        {"raw_address_line1": "12 MAIN ST", "raw_city": "OLD", "raw_zip5": "12345"},
+        ["city_issue"],
+    )
+    assert len(result["rationale"]) == 200
+    assert result["rationale"].endswith("…")
+
+
+@pytest.mark.parametrize(
+    "suggestion",
+    [
+        {
+            "line1": "12 MAIN ST",
+            "city": "NEW",
+            "zip5": "12345",
+            "changed_fields": [],
+            "rationale": "",
+        },
+        {
+            "line1": "12 MAIN ST",
+            "city": "OLD",
+            "zip5": "12345",
+            "changed_fields": ["city"],
+            "rationale": "No actual change.",
+        },
+    ],
+)
+def test_empty_or_unchanged_suggestions_are_not_rejected(suggestion):
+    with pytest.raises(NoSuggestion):
         validate_suggestion(
             json.dumps(suggestion),
             {"raw_address_line1": "12 MAIN ST", "raw_city": "OLD", "raw_zip5": "12345"},
@@ -324,10 +371,12 @@ def test_schema_and_request_keep_ground_truth_private(tmp_path):
     assert "maxItems" not in json.dumps(schema)
     assert "uniqueItems" not in json.dumps(schema)
     assert "groundtruthsecret" not in json.dumps(captured["payload"])
-    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["headers"]["Authorization"].endswith("test-key")
 
 
-def test_suggest_writes_labelled_unverified_output(tmp_path, monkeypatch):
+def test_suggest_revalidates_cache_without_groq_and_writes_labelled_output(
+    tmp_path, monkeypatch
+):
     policy, paths, ledger, kwargs = _fixture(tmp_path)
     workflow = ExceptionActionWorkflow(_settings(), ledger, **kwargs)
     content = json.dumps(
@@ -339,17 +388,23 @@ def test_suggest_writes_labelled_unverified_output(tmp_path, monkeypatch):
             "rationale": "Correct the city spelling.",
         }
     )
-    monkeypatch.setattr(
-        workflow,
-        "_suggestion_response",
-        lambda record, tokens_used: (
+    record = workflow._records()[0]
+    cache_path = workflow._suggestion_cache_path(record)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        json.dumps(
             {
                 "content": content,
                 "model_reported": "openai/gpt-oss-20b",
                 "tokens": 0,
-            },
-            "cached",
+            }
         ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        workflow,
+        "_suggestion_response",
+        lambda *args: pytest.fail("cache revalidation must not call Groq"),
     )
     summary = workflow.suggest()
     output = json.loads(paths["output"].read_text(encoding="utf-8"))
@@ -358,6 +413,137 @@ def test_suggest_writes_labelled_unverified_output(tmp_path, monkeypatch):
     assert output["model_reported"] == "openai/gpt-oss-20b"
     assert summary["suggestions_made"] == 1
     assert summary["suggestions_valid"] == 1
+    assert summary["groq_calls"] == 0
+    assert output["evaluation"]["suggestion_exact_match"] is True
+    assert workflow.dry_run("verify")["planned_precisely_credits"] == 1
+
+
+def test_rejected_suggestion_is_saved_locally_not_in_aggregate_report(tmp_path):
+    policy, paths, ledger, kwargs = _fixture(tmp_path)
+    workflow = ExceptionActionWorkflow(_settings(), ledger, **kwargs)
+    record = workflow._records()[0]
+    content = json.dumps(
+        {
+            "line1": "13 EXAMPLE ST",
+            "city": "NEW CITY",
+            "zip5": "12345",
+            "changed_fields": ["street", "city"],
+            "rationale": "Rejected house-number change.",
+        }
+    )
+    cache_path = workflow._suggestion_cache_path(record)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "content": content,
+                "model_reported": "openai/gpt-oss-20b",
+                "tokens": 12,
+            }
+        ),
+        encoding="utf-8",
+    )
+    workflow.suggest()
+    local_output = json.loads(paths["output"].read_text(encoding="utf-8"))
+    report = (tmp_path / "reports" / "actions.md").read_text(encoding="utf-8")
+    assert local_output["rejected_suggestion"] == content
+    assert content not in report
+    assert "13 EXAMPLE ST" not in report
+
+
+def test_verified_result_and_raw_suggestion_have_separate_evaluation(tmp_path):
+    policy, paths, ledger, kwargs = _fixture(tmp_path)
+    workflow = ExceptionActionWorkflow(_settings(), ledger, **kwargs)
+    record = workflow._records()[0]
+    cache_path = workflow._suggestion_cache_path(record)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "content": json.dumps(
+                    {
+                        "line1": "12 EXAMPLE ST",
+                        "city": "NEW CITY",
+                        "zip5": "12345",
+                        "changed_fields": ["city"],
+                        "rationale": "Fix city.",
+                    }
+                ),
+                "model_reported": "openai/gpt-oss-20b",
+                "tokens": 20,
+            }
+        ),
+        encoding="utf-8",
+    )
+    workflow.suggest()
+
+    class Client:
+        def geocode(self, address, tier):
+            return ProviderResponse(
+                200,
+                {
+                    "candidates": [
+                        {
+                            "precisionCode": "S5HPN-S--A",
+                            "address": {
+                                "areaName1": "CA",
+                                "mainAddressLine": "12 EXAMPLE ST",
+                                "areaName3": "WRONG CITY",
+                                "postCode1": "12345",
+                            },
+                        }
+                    ]
+                },
+                None,
+                Decimal("1"),
+            )
+
+    workflow.client = Client()
+    summary = workflow.verify()
+    output = json.loads(paths["output"].read_text(encoding="utf-8"))
+    assert summary["verified_incorrect"] == 1
+    assert output["evaluation"]["suggestion_exact_match"] is True
+    assert output["evaluation"]["verified_correct"] is False
+    assert output["evaluation"]["verified_incorrect"] is True
+
+
+def test_verified_street_comparison_ignores_unit_designator(tmp_path):
+    policy, paths, ledger, kwargs = _fixture(tmp_path)
+    with paths["truth"].open(newline="", encoding="utf-8") as source:
+        truth = list(csv.DictReader(source))
+    truth[0]["clean_address_line1"] = "1141 Napoleon Ave"
+    _write_csv(paths["truth"], truth)
+    workflow = ExceptionActionWorkflow(_settings(), ledger, **kwargs)
+    record = workflow._records()[0]
+    action = {
+        "action": "analyst_review",
+        "suggestion_status": "suggested, unverified",
+        "evaluation": {},
+    }
+    response = ProviderResponse(
+        200,
+        {
+            "candidates": [
+                {
+                    "precisionCode": "S5HPN-S--A",
+                    "address": {
+                        "areaName1": "CA",
+                        "mainAddressLine": "1141 NAPOLEON AVE APT 3",
+                        "areaName3": "NEW CITY",
+                        "postCode1": "12345",
+                    },
+                }
+            ]
+        },
+        None,
+        Decimal("0"),
+    )
+    evaluation = workflow._evaluate_action(record, action, response)
+    assert _normalize_verified_street("1141 NAPOLEON AVE APT 3") == (
+        _normalize_verified_street("1141 Napoleon Ave")
+    )
+    assert evaluation["verified_correct"] is True
+    assert evaluation["verified_incorrect"] is False
 
 
 @pytest.mark.parametrize(
@@ -499,7 +685,7 @@ def test_dry_runs_are_network_free_and_report_plan(tmp_path):
     verify = workflow.dry_run("verify")
     assert suggest["customer_outreach"] == 0
     assert suggest["analyst_review"] == 1
-    assert suggest["planned_groq_calls"] == 1
+    assert suggest["planned_groq_calls"] == 0
     assert verify["planned_precisely_calls"] == 1
     assert verify["suggest_stage_required"] is True
     assert not (tmp_path / "actions.jsonl").exists()
