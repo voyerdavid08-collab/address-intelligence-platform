@@ -1,0 +1,17 @@
+metric,value
+labelled_records,68
+calibration_records,34
+test_records,34
+excluded_missing_unit_only,8
+samples_per_record,5
+planned_model_calls,340
+estimated_tokens,163195
+alpha,0.10
+samples_failed,not_sampled_dry_run_only
+records_with_fewer_than_k_valid_samples,not_sampled_dry_run_only
+q_hat,not_run_dry_run_only
+test_contains_all_true_labels,not_run_dry_run_only
+test_contains_at_least_one_true_label,not_run_dry_run_only
+mean_prediction_set_size,not_run_dry_run_only
+singleton_share,not_run_dry_run_only
+uninformative_q_hat,not_run_dry_run_only

@@ -518,11 +518,12 @@ is not model validation.
 
 For manual-review records, a separate, human-gated workflow will:
 
-1. **Diagnose:** sample K=5 classifications per record; use sampling frequency
-   as the nonconformity score, then split-conformal calibration on ground-truth
-   defect labels (76 dirty records; approximately 38/38 calibration/test split)
-   at 90% target coverage to form a prediction set. A singleton is confident;
-   multi-label sets go to a human.
+1. **Diagnose:** sample K=5 classifications per record (each sample may return
+   one or two distinct cause labels); use
+   `1 − frequency(label)/K` as the nonconformity score, then split-conformal
+   calibration on ground-truth defect labels (68 detectable dirty records;
+   approximately 34/34 calibration/test split) at 90% target coverage to form
+   a prediction set. A singleton is confident; multi-label sets go to a human.
 2. **Suggest:** only for confident cases, provide a correction labelled
    **suggested, unverified**.
 3. **Verify:** re-run Geocode Premium on the suggestion. Accept only S5/S7/S8
@@ -535,6 +536,10 @@ Precisely-returned addresses, coordinates, or IDs. In production the address is
 personal data; require an enterprise agreement/DPA or self-hosted model.
 Limitations: small calibration set, coarse K=5 sampling, and exchangeability
 assumption under synthetic defects.
+
+Records whose only defect is `missing_unit` are excluded from diagnosis
+calibration/evaluation: the submitted address and geocoder precision/component
+signals do not establish whether an apartment/unit was omitted or mismatched.
 
 ## 13. Testing and validation strategy
 
@@ -754,7 +759,7 @@ metrics > app > narrative clarity.
 | Demographic data or other proxy variables raise fairness/legal concerns. | Prefer physical hazard/property/service context; exclude demographics from individual risk scoring; require governance/legal review for any later use. |
 | Groq free-plan daily token cap or quotas constrain processing. | Schedule LLM runs across days; honor 1K RPD, 30 RPM, 8K TPM, and 200K TPD limits. |
 | Coding-assistant allowance limits delay implementation. | Prioritize required deliverables and reserve time; do not bypass review or safety gates. |
-| Small conformal calibration set weakens uncertainty estimates. | Report empirical coverage and set size; disclose 76 dirty labels, approximate 38/38 split, K=5, and exchangeability limitations. |
+| Small conformal calibration set weakens uncertainty estimates. | Report empirical coverage and set size; disclose 68 detectable dirty labels, approximate 34/34 split, K=5, and exchangeability limitations. |
 | Local app could expose row-level Precisely outputs or API keys. | Never publicly deploy; local-only use; demo mode uses clearly labelled made-up data without keys; privately shared CSV may be loaded locally; screenshots use aggregates or made-up data only. |
 | LLM fabricates or overstates conclusions. | Allowlist evidence, require grounded output, test abstention, human review, and label generated narrative. |
 | Network or record-level API failures leave partial outputs. | Explicit statuses, bounded retries, persist stage results, and report incomplete stages without silent substitutions. |

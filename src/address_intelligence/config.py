@@ -27,6 +27,8 @@ class Settings:
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     groq_daily_token_budget: int = 180000
+    remediation_samples: int = 5
+    conformal_alpha: float = 0.10
 
     @classmethod
     def from_env(cls, *, dotenv_path: str | Path | None = None) -> "Settings":
@@ -73,6 +75,24 @@ class Settings:
                 "GROQ_DAILY_TOKEN_BUDGET must be a positive integer."
             )
 
+        samples_value = value("REMEDIATION_SAMPLES", "5")
+        try:
+            remediation_samples = int(samples_value)
+        except ValueError:
+            raise ConfigError(
+                "REMEDIATION_SAMPLES must be a positive integer."
+            ) from None
+        if remediation_samples <= 0:
+            raise ConfigError("REMEDIATION_SAMPLES must be a positive integer.")
+
+        alpha_value = value("CONFORMAL_ALPHA", "0.10")
+        try:
+            conformal_alpha = float(alpha_value)
+        except ValueError:
+            raise ConfigError("CONFORMAL_ALPHA must be between 0 and 1.") from None
+        if not 0 < conformal_alpha < 1:
+            raise ConfigError("CONFORMAL_ALPHA must be between 0 and 1.")
+
         return cls(
             api_key=value("PRECISELY_API_KEY", "") or None,
             api_secret=value("PRECISELY_API_SECRET", "") or None,
@@ -83,6 +103,8 @@ class Settings:
             groq_api_key=value("GROQ_API_KEY", "") or None,
             groq_model=value("GROQ_MODEL", "openai/gpt-oss-120b"),
             groq_daily_token_budget=groq_daily_token_budget,
+            remediation_samples=remediation_samples,
+            conformal_alpha=conformal_alpha,
         )
 
     def require_api_credentials(self) -> tuple[str, str]:
@@ -108,6 +130,8 @@ class Settings:
             f"groq_api_key={'****' if self.groq_api_key else None!r}, "
             f"groq_model={self.groq_model!r}, "
             f"groq_daily_token_budget={self.groq_daily_token_budget!r}, "
+            f"remediation_samples={self.remediation_samples!r}, "
+            f"conformal_alpha={self.conformal_alpha!r}, "
             f"log_level={self.log_level!r})"
         )
 
