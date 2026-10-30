@@ -1,3 +1,4 @@
 status,guardrail_reason,count
-generated,,4
-template,,1
+generated,,169
+rejected_by_guardrail,elevation value not labelled as base flood elevation,1
+template,,30

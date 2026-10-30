@@ -95,6 +95,11 @@ _UNAVAILABLE_FIELD_PHRASES = {
     "base_flood_elevation": ("base flood elevation",),
     "distance_to_water": ("distance to water",),
 }
+_ELEVATION_LABEL_RE = re.compile(r"\b(?:base flood elevation|bfe)\b", re.IGNORECASE)
+_PROPERTY_ELEVATION_RE = re.compile(
+    r"\b(?:sits at an elevation|property elevation|elevation of the property)\b",
+    re.IGNORECASE,
+)
 _DISCLOSURE_NAMES = {
     "built_year": "year built",
     "base_flood_elevation": "base flood elevation",
@@ -252,6 +257,28 @@ def validate_model_result(
         number = _decimal_number(match.group(0))
         if number not in allowed_numbers:
             raise NarrativeGuardrailError("narrative contains an unsupported number")
+    bfe_value = evidence.get("base_flood_elevation", "")
+    if bfe_value:
+        bfe_numbers = {
+            _decimal_number(match.group(0))
+            for match in _NUMBER_PATTERN.finditer(bfe_value)
+        }
+        sentences = re.split(r"(?<=[.!?])\s+", narrative.strip())
+        for sentence in sentences:
+            contains_bfe_value = any(
+                _decimal_number(match.group(0)) in bfe_numbers
+                for match in _NUMBER_PATTERN.finditer(sentence)
+            )
+            if not contains_bfe_value:
+                continue
+            if _PROPERTY_ELEVATION_RE.search(sentence):
+                raise NarrativeGuardrailError(
+                    "elevation value not labelled as base flood elevation"
+                )
+            if not _ELEVATION_LABEL_RE.search(sentence):
+                raise NarrativeGuardrailError(
+                    "elevation value not labelled as base flood elevation"
+                )
     return result
 
 
@@ -477,6 +504,86 @@ class NarrativeGenerator:
             result["stopped_for_budget"] = 1
         return result
 
+    def revalidate_cached(self, limit: int | None = None) -> dict[str, int]:
+        """Rebuild generated records from stored model text without any API calls."""
+        selected = self._records(limit)
+        output_records = self._existing_output()
+        processed = {
+            "template": 0,
+            "abstained": 0,
+            "generated": 0,
+            "rejected_by_guardrail": 0,
+            "failed": 0,
+            "api_calls": 0,
+        }
+
+        for result, policy in selected:
+            policy_id = result["policy_id"]
+            evidence = build_evidence(result, policy)
+            not_available = compute_not_available(evidence)
+            route = self._route(result, evidence)
+            if route == "template":
+                output = self._template(policy_id, result)
+            elif route == "abstained":
+                output = self._base_output(policy_id, "abstained")
+            else:
+                cached_output = output_records.get(policy_id, {})
+                narrative_model = cached_output.get("narrative_model", "")
+                if not narrative_model:
+                    output = self._base_output(policy_id, "failed")
+                    output["guardrail_reason"] = "cached model response unavailable"
+                    processed["failed"] += 1
+                    output["missing_evidence"] = not_available
+                    output_records[policy_id] = output
+                    continue
+                content = json.dumps(
+                    {
+                        "narrative": narrative_model,
+                        "evidence_fields_used": cached_output.get(
+                            "evidence_fields_used", []
+                        ),
+                    }
+                )
+                try:
+                    validated = validate_model_result(
+                        content, evidence, not_available
+                    )
+                except NarrativeGuardrailError as error:
+                    output = self._base_output(
+                        policy_id, "rejected_by_guardrail"
+                    )
+                    output["guardrail_reason"] = str(error)
+                    output["narrative_model"] = narrative_model.translate(
+                        _ASCII_PUNCTUATION
+                    )
+                    output["evidence_fields_used"] = cached_output.get(
+                        "evidence_fields_used", []
+                    )
+                    output["model"] = cached_output.get("model", self.settings.groq_model)
+                    output["model_reported"] = cached_output.get("model_reported", "")
+                    output["tokens"] = cached_output.get("tokens", 0)
+                    processed["rejected_by_guardrail"] += 1
+                else:
+                    output = dict(cached_output)
+                    output.update(validated)
+                    narrative_model = validated["narrative"]
+                    output["narrative_model"] = narrative_model
+                    output["narrative"] = _append_missing_disclosure(
+                        narrative_model, not_available
+                    )
+                    output["missing_evidence"] = not_available
+                    output["prompt_version"] = PROMPT_VERSION
+                    output["status"] = "generated"
+                    output["guardrail_reason"] = ""
+                    processed["generated"] += 1
+            output["missing_evidence"] = not_available
+            if route in ("template", "abstained"):
+                processed[route] += 1
+            output_records[policy_id] = output
+
+        self._write_output(output_records)
+        return processed
+
     def _get_model_response(
         self, policy_id: str, evidence: dict[str, str], today: str, tokens_used: int
     ) -> tuple[dict[str, Any], str]:
@@ -682,26 +789,41 @@ def run_narrative_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate evidence-limited narratives.")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true", help="Call Groq (requires typing YES).")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print estimates without updating local narrative outputs.",
+    )
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be at least 1")
     settings = Settings.from_env()
     configure_logging(settings)
     generator = NarrativeGenerator(settings)
-    counts = generator.dry_run(args.limit)
-    if not args.execute:
+    if args.dry_run:
+        counts = generator.dry_run(args.limit)
         print("Mode: DRY RUN (no network calls)")
-    else:
-        print("Mode: EXECUTE (plan; confirmation required)")
+        print(
+            f"Records: {sum(counts[key] for key in ('template', 'abstained', 'model', 'cached'))}; "
+            f"templates: {counts['template']}; abstentions: {counts['abstained']}; "
+            f"model calls: {counts['model']}; cached: {counts['cached']}; "
+            f"estimated tokens: {counts['estimated_tokens']}; "
+            f"daily budget remaining: {counts['daily_budget_remaining']}"
+        )
+        return 0
+    if not args.execute:
+        print("Mode: CACHE-ONLY REVALIDATION (no API calls)")
+        summary = generator.revalidate_cached(args.limit)
+        for name, value in summary.items():
+            print(f"{name.replace('_', ' ').capitalize()}: {value}")
+        return 0
+    counts = generator.dry_run(args.limit)
+    print("Mode: EXECUTE (plan; confirmation required)")
     print(
-        f"Records: {sum(counts[key] for key in ('template', 'abstained', 'model', 'cached'))}; "
-        f"templates: {counts['template']}; abstentions: {counts['abstained']}; "
-        f"model calls: {counts['model']}; cached: {counts['cached']}; "
+        f"Model calls: {counts['model']}; cached: {counts['cached']}; "
         f"estimated tokens: {counts['estimated_tokens']}; "
         f"daily budget remaining: {counts['daily_budget_remaining']}"
     )
-    if not args.execute:
-        return 0
     if input("Type YES to send allowlisted evidence to Groq: ") != "YES":
         print("Execution cancelled.")
         return 1

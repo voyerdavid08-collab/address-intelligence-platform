@@ -321,6 +321,76 @@ def test_sentence_guardrail_accepts_four_and_rejects_one_or_five():
             validate_model_result(content(count), evidence)
 
 
+def test_base_flood_elevation_number_requires_same_sentence_label():
+    evidence = {
+        "flood_zone_base": "AE",
+        "flood_risk_level": "High",
+        "base_flood_elevation": "5354 feet",
+    }
+    bad = json.dumps(
+        {
+            "narrative": "The property sits at an elevation of 5,354 feet. "
+            "The flood zone is AE and the reported risk is High.",
+            "evidence_fields_used": [
+                "flood_zone_base",
+                "flood_risk_level",
+                "base_flood_elevation",
+            ],
+        }
+    )
+    with pytest.raises(
+        NarrativeGuardrailError,
+        match="elevation value not labelled as base flood elevation",
+    ):
+        validate_model_result(bad, evidence)
+
+
+def test_labelled_base_flood_elevation_value_passes():
+    evidence = {
+        "flood_zone_base": "AE",
+        "flood_risk_level": "High",
+        "base_flood_elevation": "13 feet",
+    }
+    content = json.dumps(
+        {
+            "narrative": "The base flood elevation of 13 feet is reported. "
+            "The flood zone is AE and the reported risk is High.",
+            "evidence_fields_used": [
+                "flood_zone_base",
+                "flood_risk_level",
+                "base_flood_elevation",
+            ],
+        }
+    )
+
+    validate_model_result(content, evidence)
+
+
+def test_property_elevation_attribution_is_rejected_when_only_bfe_is_available():
+    evidence = {
+        "flood_zone_base": "AE",
+        "flood_risk_level": "High",
+        "base_flood_elevation": "5354 feet",
+    }
+    content = json.dumps(
+        {
+            "narrative": "The property elevation is 5,354 feet. "
+            "The flood zone is AE and risk is High.",
+            "evidence_fields_used": [
+                "flood_zone_base",
+                "flood_risk_level",
+                "base_flood_elevation",
+            ],
+        }
+    )
+
+    with pytest.raises(
+        NarrativeGuardrailError,
+        match="elevation value not labelled as base flood elevation",
+    ):
+        validate_model_result(content, evidence)
+
+
 def test_model_response_cache_hit_makes_no_second_call(tmp_path):
     row = _eligible_row()
     results_path, policies_path = _paths(tmp_path, [row], [_policy()])
@@ -709,3 +779,69 @@ def test_different_reported_model_is_stored_and_warned(tmp_path):
     output = json.loads((tmp_path / "narratives.jsonl").read_text().splitlines()[0])
     assert output["model"] == "openai/gpt-oss-120b"
     assert output["model_reported"] == "openai/gpt-oss-20b"
+
+
+def test_revalidate_cached_rejects_labeling_issue_without_api_call(tmp_path):
+    row = _eligible_row(
+        policy_id="POL-000183",
+        precision_code="S8HPNTSCZA",
+        flood_zone_code="AE5354-LOMR",
+        flood_risk_level="High",
+        bfe="5354",
+        bfe_unit="feet",
+        distance_to_water="0.048",
+        distance_to_water_unit="MILES",
+    )
+    policy = _policy("POL-000183")
+    results_path, policies_path = _paths(tmp_path, [row], [policy])
+    output_path = tmp_path / "narratives.jsonl"
+    output_path.write_text(
+        json.dumps(
+            {
+                "policy_id": "POL-000183",
+                "status": "generated",
+                "narrative_model": (
+                    "The property is located 0.048 miles from water and sits at "
+                    "an elevation of 5,354 feet. It is classified in flood zone "
+                    "AE with a high flood risk level."
+                ),
+                "narrative": "old output",
+                "evidence_fields_used": [
+                    "distance_to_water",
+                    "base_flood_elevation",
+                    "flood_zone_base",
+                    "flood_risk_level",
+                    "match_quality",
+                    "metro",
+                    "line_of_business",
+                ],
+                "model": "openai/gpt-oss-120b",
+                "model_reported": "openai/gpt-oss-120b",
+                "tokens": 507,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    api_calls = []
+    generator = NarrativeGenerator(
+        _settings(),
+        results_path=results_path,
+        policies_path=policies_path,
+        output_path=output_path,
+        cache_root=tmp_path / "cache",
+        daily_usage_path=tmp_path / "daily.json",
+        post=lambda *args, **kwargs: api_calls.append(args),
+    )
+
+    summary = generator.revalidate_cached()
+    output = json.loads(output_path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert api_calls == []
+    assert summary["api_calls"] == 0
+    assert summary["rejected_by_guardrail"] == 1
+    assert output["status"] == "rejected_by_guardrail"
+    assert output["guardrail_reason"] == (
+        "elevation value not labelled as base flood elevation"
+    )
+    assert "base_flood_elevation" in output["evidence_fields_used"]
