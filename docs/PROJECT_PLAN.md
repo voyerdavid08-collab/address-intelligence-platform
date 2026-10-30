@@ -212,12 +212,16 @@ precisely_project/
 ├── .env.example                   # names/placeholders only; never credentials
 ├── .gitignore
 ├── main.py                        # minimal CLI entry point, if useful
+├── config/
+│   └── client_profile.yaml        # client-specific columns, attributes, rules
+├── app/                            # local-only Streamlit application
 ├── src/
 │   └── address_intelligence/
 │       ├── __init__.py
 │       ├── config.py
 │       ├── models.py              # canonical typed contracts
 │       ├── pipeline.py            # deterministic orchestration
+│       ├── remediation.py         # AI-assisted exception diagnosis/suggestion
 │       ├── metrics.py
 │       ├── reporting.py
 │       ├── synthetic_data.py
@@ -232,6 +236,7 @@ precisely_project/
 ├── data/
 │   ├── input/                     # synthetic input only
 │   └── output/                    # generated outputs; ignore run-specific files
+├── reports/                        # baseline, narrative, and remediation summaries
 ├── tests/
 │   ├── unit/
 │   ├── fixtures/
@@ -243,10 +248,18 @@ precisely_project/
 └── .github/                       # optional later, only if existing CI is appropriate
 ```
 
-This is a proposed shape, not a requirement to create every file at once.
+This plan tracks the implementation; listed paths include implemented modules
+and remaining work.
 Prefer a small runnable package over a notebook-only design because reusable
 interfaces and repeatable tests matter; optionally add a notebook only if it
 materially improves the live demonstration.
+
+### Reusability: client profile
+
+`config/client_profile.yaml` drives both the CLI pipeline and the app: input
+column mapping, selected enrichment attributes and credit cost, eligibility
+rules, AI steps on/off, conformal target, and data-handling rules. **New client
+= new profile + their CSV.**
 
 ## 7. API dependencies and verification steps
 
@@ -452,17 +465,17 @@ do not rename unrelated data to make the count appear satisfied.
 
 This is one focused AI capability, not an autonomous agent. Given a single
 synthetic record's verified geocoding and available, allowlisted enrichment
-attributes, generate a two- or three-sentence plain-English summary for an
-underwriter. It should help a human understand relevant location context and
-what evidence is missing; it must not decide price, eligibility, claims, or
-coverage.
+attributes, generate a two- to four-sentence plain-English summary for an
+underwriter. Code computes missing-data disclosure and appends it after model
+guardrails pass. It must not decide price, eligibility, claims, or coverage.
 
 **Inputs**
 
 - Synthetic record ID (not personal identity).
 - Only successfully returned, allowlisted geocoding/enrichment values and
   provenance.
-- Explicit null/missing indicators and any deterministic review flags.
+- Only returned allowlisted evidence; missingness is computed locally and is
+  not sent to the model.
 - Optional controlled prompt/version metadata.
 
 **Outputs**
@@ -479,27 +492,49 @@ coverage.
 - Never ask the LLM to infer a hazard zone, building attribute, risk score,
   loss probability, premium, or causal relationship absent source evidence.
 - Constrain output to supplied facts; distinguish source facts from
-  interpretation and state material uncertainty.
+  interpretation; the model must not mention absent fields.
 - No demographic input for individual underwriting narrative/scoring.
 - Validate structured response shape and length; treat malformed output as
   a surfaced failure, not a successful fallback.
 - Require human review; label the output as decision support, not a decision.
 - Store prompts/results carefully and avoid logging full records.
 
-**Provider choice:** first compare the assignment's listed free-tier options
-(Gemini, Groq, Hugging Face Inference API, or local Ollama) for access,
-current free-tier constraints, data handling/privacy terms, and laptop
-compatibility. Do not claim a free tier, data-retention policy, or model
-capability without checking current terms. A local model reduces external
-data transfer but may require more laptop resources and may be less reliable;
-a hosted free-tier service may be easier to demo but adds account, quota,
-privacy, and availability dependencies.
+**Provider choice:** Groq free plan ($0), model `openai/gpt-oss-120b` (open
+weight, hosted by Groq; requests do not go to OpenAI). Groq Services Agreement
+§4.2 prohibits training on inputs/outputs; Global Zero Data Retention is
+enabled because inputs/outputs may otherwise be stored up to 30 days. Only
+allowlisted derived facts are sent, never addresses, coordinates, or
+PreciselyIDs. Production requires an enterprise agreement with a data
+processing addendum. See `docs/API_DISCOVERY.md` for the provider comparison
+and verified limits.
 
-**Evaluation:** use a small hand-reviewed set of actual or clearly labelled
-fixture records. Check that every factual clause is supported by an input
-field, missing evidence is not invented, the summary is understandable, and
-abstention works. Record qualitative review outcomes and failure cases; do
-not present a tiny subjective evaluation as model validation.
+**Evaluation:** two reviewers assessed ten narratives. Supported claims were
+10/10; mean clarity was 3.1 versus 3.3; exact agreement was 8/10. Check that
+every factual clause is supported, missing evidence is not invented, the
+summary is understandable, and abstention works. This small subjective review
+is not model validation.
+
+### AI-assisted exception remediation
+
+For manual-review records, a separate, human-gated workflow will:
+
+1. **Diagnose:** sample K=5 classifications per record; use sampling frequency
+   as the nonconformity score, then split-conformal calibration on ground-truth
+   defect labels (76 dirty records; approximately 38/38 calibration/test split)
+   at 90% target coverage to form a prediction set. A singleton is confident;
+   multi-label sets go to a human.
+2. **Suggest:** only for confident cases, provide a correction labelled
+   **suggested, unverified**.
+3. **Verify:** re-run Geocode Premium on the suggestion. Accept only S5/S7/S8
+   with standardized state matching input; otherwise route to the human queue.
+4. **Evaluate:** report exceptions cleared, incorrect fixes (target 0) against
+   ground truth, empirical test-split coverage, and mean prediction-set size.
+
+This step sends the submitted synthetic address to the LLM—not
+Precisely-returned addresses, coordinates, or IDs. In production the address is
+personal data; require an enterprise agreement/DPA or self-hosted model.
+Limitations: small calibration set, coarse K=5 sampling, and exchangeability
+assumption under synthetic defects.
 
 ## 13. Testing and validation strategy
 
@@ -573,7 +608,7 @@ and attempted counts separately.
   specific carrier's process. Compare its flood-zone result with the result at
   the Geocode Premium verified building location (precisionCode S8/S5/S7),
   using flood by location at both points. Measure the share whose flood-zone
-  category changes. Premium auto-corrects defective inputs, so comparing raw
+  category changes by flood-zone base code and risk tier. Premium auto-corrects defective inputs, so comparing raw
   input with Premium verification would not produce a meaningful location
   contrast.
 - **Persistent identifier coverage:** records with an actually returned
@@ -581,7 +616,11 @@ and attempted counts separately.
 - **Enrichment completeness:** non-missing values per selected attribute,
   separately over eligible records and all input records.
 - **AI usability:** narrative/abstention/error counts and human-reviewed
-  evidence-support results.
+  evidence-support results (two-reviewer results: supported 10/10, clarity 3.1
+  vs 3.3, exact agreement 8/10).
+- **Exception remediation:** prediction-set coverage and mean size on the held
+  out test split; exceptions cleared; incorrect fixes against ground truth
+  (target zero).
 - **Data integrity:** input rows, output rows, duplicates, dropped records
   (target zero), and explicit stage failures.
 
@@ -633,26 +672,26 @@ sensitivity table, and the difference between:
 - business outcomes that would require a controlled pilot and carrier data to
   measure.
 
-AI value statement should describe what it enables—turning several
-evidence-backed fields into a concise, reviewable explanation—not imply that
-AI itself improves risk accuracy or replaces underwriting judgment.
+AI value beyond enrichment is exception remediation measured against Risk 1
+(manual rework); narrative generation is an evidence-backed explanation, not a
+risk-accuracy improvement. Do not claim AI improves risk accuracy or replaces
+underwriting judgment.
 
 ## 17. Implementation phases, dependencies, and acceptance criteria
 
-All phases are gated by review of this plan. No application implementation
-begins until the owner approves the plan and the required API access path is
-understood.
+Implementation was gated by review of this plan and verification of the required
+API access path.
 
-| Phase | Work | Dependencies | Acceptance criteria |
+| Phase | Work / status | Dependencies | Acceptance criteria |
 |---|---|---|---|
-| 0. Plan and access discovery | Approve this plan; inspect official Precisely docs/account, candidate enrichment products, trial credits, LLM terms, and repository visibility constraints. | Owner plan review; account access. | API verification checklist completed or blockers recorded; no speculative API calls; visibility approval remains separate. |
-| 1. Minimal foundation | Add project setup, canonical contracts, configuration, safe logging, and reproducible local command. | Phase 0; approved module scope. | Clean local setup; secrets excluded; offline tests run. |
-| 2. Synthetic data and baseline | Generate 200–500 seeded records, controls and documented noise; define metrics. | Phase 1. | All required defect categories present; dirty percentage/count documented; tests confirm generator and baseline. |
-| 3. Precisely address and geocoding | Implement verified API adapters, bounded safe handling, standardization, geocoding, and PreciselyID mapping only if documented/returned. | Verified US API/products/account access; credit estimate and owner approval. | Small live smoke test passes within budget; output provenance/status correct; full 200-record run is credit-feasible or blocker disclosed; coarse-versus-verified comparison subset is budgeted. |
-| 4. Enrichment | Select and implement 3–5 verified attributes for eligible records; compare coarse Basic and verified Premium location enrichment on a subset when flood-zone information is available. | US product access, semantics, terms, credits, Phase 3 data, and comparison-subset size set after Phase 0. | Each field has documented definition/source; partial/missing data is represented honestly; eligible-row coverage and coarse-versus-verified flood-zone changes (or labelled geocode-displacement proxy) are reported. |
-| 5. Focused AI workflow | Implement evidence-grounded narrative with selected free-tier/local option and safety tests. | Enrichment result shape; chosen provider/privacy review. | Tested output and abstention; factual claims tied to input fields; no unsupported decisions. |
-| 6. Reporting and impact | Produce before/after detail/summary and the mandatory `docs/BUSINESS_IMPACT.md` summary, with optional PDF export. | Real run artifacts or clearly labelled fallback; metric definitions and transparent financial inputs. | Required metrics and outputs present; two cost/revenue risks quantified; solution mitigation and AI's incremental value explained; assumptions separated from measurements; one-page summary is clear to a non-technical executive. |
-| 7. Final validation and submission | Re-run from clean setup; review artifacts/secrets; verify reviewer-facing documents and required outputs. | Phases 1–6. | README/run steps reproduce output; tests and integration results reported accurately; mandatory artifacts included; visibility approval remains separate. |
+| 0. Plan and access discovery | COMPLETE (Oct 27–29) | Account access | Access, policy, account and API decisions recorded. |
+| 1. Minimal foundation | COMPLETE (Oct 27–29) | Phase 0 | Local setup, secret handling, configuration, ledger and tests complete. |
+| 2. Synthetic data and baseline | COMPLETE (Oct 27–29) | Phase 1 | Deterministic 200-record dataset, defect ground truth and baseline complete. |
+| 3. Precisely address and geocoding | COMPLETE (full run Oct 29) | Verified APIs and credit plan | 200-row run, 170 eligible; outcomes and billing reconciled. |
+| 4. Enrichment and Risk 2 comparison | COMPLETE (full run Oct 29) | Phase 3 | Selected enrichments and coarse-vs-verified comparison complete; coverage gaps disclosed. |
+| 5. Evidence-grounded narrative | COMPLETE (Oct 29) | Enrichment fields | Allowlist, deterministic disclosure, guardrails, cache and human evaluation complete. |
+| 6. AI-assisted exception remediation | IN PROGRESS | Ground truth, profile and remaining credit budget | Calibrated diagnosis, verified suggestions, human routing, and held-out evaluation. |
+| 7. Reporting, app and submission | IN PROGRESS | Phases 0–6 | Metrics, business summary, client profile, local app, documentation and final validation. |
 
 **Phase 7 submission hygiene:** internal planning documents, including this
 file, are not submitted. Reviewer-facing documents are `README.md`,
@@ -689,57 +728,42 @@ rewriting history or publishing before explicit approval.
 
 ### Schedule
 
-Deadline: Nov 6. Target submission: Nov 4. Nov 5 is reserved as a buffer.
+Deadline: Nov 6. Target submission: Nov 3. Nov 4–5 are buffers.
 
 | Date | Planned work |
 |---|---|
-| Oct 27–28 | Phase 0 and plan cleanup. Phase 0 account/portal access and verification are performed by the owner. |
-| Oct 28 | Phase 1: minimal foundation, after the Phase 0 access gate clears. |
-| Oct 29 | Phase 2: synthetic data and baseline. |
-| Oct 30 | Phase 3: smoke test, only after the owner approves the credit estimate. |
-| Oct 31 | Phase 3: full run, within the approved credit budget. |
-| Nov 1 | Phase 4: enrichment and coarse-versus-verified comparison. |
-| Nov 2 | Phase 5: focused AI workflow. |
-| Nov 3 | Phase 6: reporting and business impact summary. |
-| Nov 4 | Phase 7: final validation and target submission. |
-| Nov 5 | Schedule buffer. |
-| Nov 6 | Deadline. |
+| Oct 29–30 | Docs catch-up and remediation diagnosis |
+| Oct 31 | Suggestion/verification and optional narrative clarity fix |
+| Nov 1 | Metrics/reports and client profile |
+| Nov 2 | Time-boxed Streamlit app and business impact summary |
+| Nov 3 | README/ARCHITECTURE, final validation and target submission |
+| Nov 4–5 | Buffer |
+| Nov 6 | Deadline |
 
-If Phase 0 slips, later dates slip accordingly; do not bypass access or credit
-verification to preserve the target dates.
+If schedule is constrained, prioritize: business summary > remediation >
+metrics > app > narrative clarity.
 
-## 18. Risks, mitigations, and unresolved questions
+## 18. Risks, mitigations, and open items
 
 | Risk / question | Mitigation or decision gate |
 |---|---|
-| Precisely trial access, APIs, products, or attributes are unavailable or differ from assumptions. | Verify official current docs and account access first; implement only verified mappings; disclose unmet requirements. |
-| API credit use is higher than expected or differs by operation. | Verify credit accounting; estimate before calls; reserve credits; enforce explicit cap; do not exploratory-call blindly. |
+| Precisely costs differ from estimates, or remediation uses the remaining budget. | Confirm charge rates, reserve credits, and gate retries; estimated remediation ceiling is about 270 credits. |
 | Synthetic/altered addresses fail to resolve. | Use permitted, non-residential/public test locations as controlled anchors where available; retain clean controls and unresolvable cases; disclose limitations. |
 | 200–500 synthetic records are not representative of the fictional 300k+ portfolio. | Report sample evidence only; avoid extrapolating observed rates as carrier results; use labelled scenario assumptions. |
 | Enrichment attributes are unavailable, incomplete, or unsuitable for underwriting. | Gate on account/product/coverage verification; select only decision-relevant fields; transparent fallback and limitation disclosure. |
 | Demographic data or other proxy variables raise fairness/legal concerns. | Prefer physical hazard/property/service context; exclude demographics from individual risk scoring; require governance/legal review for any later use. |
-| Hosted LLM free tier, availability, retention, or privacy terms change. | Verify current terms and quotas; use synthetic data only; keep provider swappable; consider local model if feasible. |
+| Groq free-plan daily token cap or quotas constrain processing. | Schedule LLM runs across days; honor 1K RPD, 30 RPM, 8K TPM, and 200K TPD limits. |
+| Coding-assistant allowance limits delay implementation. | Prioritize required deliverables and reserve time; do not bypass review or safety gates. |
+| Small conformal calibration set weakens uncertainty estimates. | Report empirical coverage and set size; disclose 76 dirty labels, approximate 38/38 split, K=5, and exchangeability limitations. |
+| Local app could expose row-level Precisely outputs or API keys. | Never publicly deploy; local-only use; demo mode uses clearly labelled made-up data without keys; privately shared CSV may be loaded locally; screenshots use aggregates or made-up data only. |
 | LLM fabricates or overstates conclusions. | Allowlist evidence, require grounded output, test abstention, human review, and label generated narrative. |
 | Network or record-level API failures leave partial outputs. | Explicit statuses, bounded retries, persist stage results, and report incomplete stages without silent substitutions. |
-| Public-repository requirement conflicts with current private repository and user publication controls. | Keep repository private until explicit approval to change visibility; review artifacts for secrets and permitted data before publishing. |
-| Assignment's public GitHub requirement and current `feature/v1` branch workflow may affect final submission. | Work only on `feature/v1`; never modify `main`; no commit, push, publication, or history changes without explicit approval. |
+| Public-repository requirement conflicts with repository visibility controls. | Keep repository private until explicit approval; publish only approved files and no row-level Precisely data. |
 | The exact financial inputs for the VP summary are absent. | Use a transparent assumption table/ranges or request approved carrier baselines; do not present invented values as fact. |
 
-### Unresolved questions for later implementation
-
-1. Is Precisely trial access active, and what are the confirmed expiration date,
-   credit balance, operation costs, limits, and permitted test-data rules?
-2. Which current Precisely products/fields are actually enabled for this
-   account and geography, including a supported PreciselyID workflow?
-3. Which 3–5 attributes are both available and acceptable for the intended
-   underwriting demonstration?
-4. Which free-tier/local LLM option meets current access, privacy, quota, and
-   laptop constraints?
-5. Are carrier-approved cost-per-reroute, review-cost, or other financial
-   assumptions available, or should the impact summary use explicitly
-   illustrative ranges?
-6. May the GitHub repository be changed from private to public for final
-   submission, and may the final artifacts be pushed/published?
+No remaining technical item blocks the current work. Financial baselines and
+repository-publication approval remain governance inputs; use labelled
+assumptions and keep visibility unchanged until authorized.
 
 ## 19. Final submission checklist
 
@@ -789,16 +813,30 @@ verification to preserve the target dates.
 - [ ] No commit, push, publication, branch deletion, or history change occurs
   without explicit approval.
 
-## 20. Optional enhancements, prioritized by business value and effort
+## 20. In-scope local Streamlit app and optional enhancements
+
+### Streamlit app (time-boxed, in scope)
+
+- Run locally only; never deploy publicly because the app may load row-level
+  Precisely data and API keys.
+- Provide a demo mode using clearly labelled made-up data and no API keys.
+- Allow loading a privately shared row-level CSV locally.
+- Screenshots may contain aggregates or made-up data only.
+- Tabs: **Profile + cost estimate**; **Results** (metrics and Risk 2); and
+  **Exceptions** (queue with diagnosis, confidence, verified fix, and
+  narratives).
+- Drop the app if it is not working by end of Nov 2; prioritize the business
+  summary, remediation, and metrics.
+
+### Optional enhancements
 
 | Priority | Enhancement | Business value | Effort / reason to defer |
 |---|---|---|---|
-| 1 | Small local demo UI (Streamlit or Gradio) showing selected records, status, and before/after evidence. | Makes the customer story interactive. | Optional in assignment; add only after the pipeline is stable. |
-| 2 | Scenario/sensitivity controls for dirty rate, reroute cost, and review cost. | Makes assumptions and potential impact transparent to executives. | Moderate effort; a simple documented spreadsheet/table may suffice. |
-| 3 | Alternate provider or fixture adapter. | Demonstrates reusability and supports offline development. | Useful only if it does not distract from the required Precisely integration. |
-| 4 | Additional AI evaluation set and reviewer rubric. | Improves confidence in narrative grounding and consistency. | More review effort; not a substitute for production model validation. |
-| 5 | Larger-volume performance experiment up to the fictional carrier scale. | Helps frame operational scaling questions. | Not required; synthetic prototype metrics do not establish production throughput. |
-| 6 | Automated CI checks. | Repeatable quality gates. | Add only if repository and available tooling justify the setup. |
+| 1 | Scenario/sensitivity controls for dirty rate, reroute cost, and review cost. | Makes assumptions and potential impact transparent to executives. | Moderate effort; a simple documented spreadsheet/table may suffice. |
+| 2 | Alternate provider or fixture adapter. | Demonstrates reusability and supports offline development. | Useful only if it does not distract from required work. |
+| 3 | Additional AI evaluation set and reviewer rubric. | Improves confidence in narrative grounding and consistency. | More review effort; not a substitute for production model validation. |
+| 4 | Larger-volume performance experiment up to the fictional carrier scale. | Helps frame operational scaling questions. | Not required; synthetic prototype metrics do not establish production throughput. |
+| 5 | Automated CI checks. | Repeatable quality gates. | Add only if repository and available tooling justify the setup. |
 
 The core deliverable remains a small, tested local pipeline with verified
 external integrations, transparent evidence, and the mandatory, clear

@@ -4,8 +4,8 @@ Purpose: record verified Precisely trial, API, US coverage, enrichment, and
 LLM details before implementation or API calls. Fill this worksheet from
 official documentation and the trial account.
 
-**Status:** Phase 0 COMPLETE (smoke test 2026-10-28)
-**Date checked:** 2026-10-28
+**Status:** Phase 0 COMPLETE; full run COMPLETE (2026-10-29)
+**Date checked:** 2026-10-29
 
 Every filled value must include a source link or the note
 `observed in account on <date>`. Do not infer undocumented behavior.
@@ -15,14 +15,14 @@ Every filled value must include a source link or the note
 | Item | Value | Source / observation |
 |---|---|---|
 | Platform | Precisely APIs (`developer.precisely.com`, `api.precisely.com`) | Account, observed 2026-10-28 |
-| Trial start date | TBD | TBD |
-| Trial expiry date | TBD-owner to record | TBD |
+| Trial start date | Not recorded | Not recorded |
+| Trial expiry date | Not recorded | Not recorded |
 | Credit balance at start | 2,500 credits; approximately 30-day trial | Account, observed 2026-10-28 |
 | Credit value | 1 credit = $0.01 | Account, observed 2026-10-28 |
 | Credit charging rule | True errors are free; a not-found answer returned as Status F is a result and was charged | Account and smoke test, observed 2026-10-28 |
 | Where the balance is visible | Portal Credit Usage dashboard; per-API calls, errors, and usage | Account, observed 2026-10-28 |
-| Permitted test-data rules | TBD | TBD |
-| US coverage confirmed (Y/N/TBD) | TBD; account product/attribute access confirmation pending | TBD |
+| Permitted test-data rules | Synthetic test addresses only in this project | Project data-minimization decision |
+| US coverage confirmed (Y/N) | Yes; full run completed on US street anchors | Full run, observed 2026-10-29 |
 | Production licensing note | Pricing page footnote: applications making determinations of risk may carry additional fees; commercial licensing note for production, not a trial blocker | Account, observed 2026-10-28 |
 
 ## 2. Authentication
@@ -40,20 +40,20 @@ belong only in `.env`, never in this file.
 
 ## 3. Operations and documentation
 
-| Operation | Official doc link | Endpoint (as documented) | Enabled on my account? (Y/N/TBD) | Credits per call (as documented) | Batch supported? | Key response fields | US coverage | Notes | Source |
+| Operation | Official doc link | Endpoint (as documented) | Enabled/used? | Credits per call | Batch supported? | Key response fields | US coverage | Notes | Source |
 |---|---|---|---|---|---|---|---|---|---|
-| Address verification/standardization: ValidateMailingAddress / Pro / Premium | TBD | TBD | TBD | 1 credit per US address for each; 0.33 per USCAN address for each | TBD | Premium adds parsed elements, per-element match codes, lat/long | US pricing listed; account access TBD | Premium returned Status F “Address Not Found” for defective input but charged 1 credit; not used in full run | Account and smoke test, observed 2026-10-28 |
-| Geocoding forward: Premium | Docs mapping appendix | `/geocode/v1/premium/geocode` | TBD | Premium: 1 credit; Advanced: 0.5; Basic: 0.1. POST is per address. | TBD | `candidates[].precisionCode`; `candidates[].precisionLevel`; suffix `HPNTSCZA` | TBD | GET; Advanced endpoint TBD | Account, observed 2026-10-28 |
-| Geocoding forward: Advanced / Basic | TBD | Advanced: TBD; Basic: TBD | TBD | Advanced: 0.5 credit; Basic: 0.1 credit. POST is per address. | TBD | `candidates[].precisionCode`; `candidates[].precisionLevel`; suffix `HPNTSCZA` | TBD | GET | Account, observed 2026-10-28 |
-| PreciselyID by address | Geocode/PreciselyID/byPreciselyID/resp_desc.html | `/geocode/v1/key/byaddress` | TBD | 0.01 credit | TBD | `key`, `matchedAddress` | TBD |  | Account, observed 2026-10-28 |
-| Key lookup | TBD | TBD | TBD | 0.01 credit | TBD | TBD | TBD |  | Account, observed 2026-10-28 |
-| Flood by location: flood zone code, flood risk level, base flood elevation | TBD | `/risks/v1/flood/bylocation?latitude&longitude&includeZoneDesc&includeGeometry` | TBD | 5 credits per call | TBD | `floodZone.code`, `floodZone.areaType`, `floodZone.riskLevel`, `floodZone.primaryZone.code/description`, `floodZone.baseFloodElevation.unit/value`, `floodZone.additionalInfo`, `community.number`, `community.status.code/description` | US only | One flood call supplies the listed candidate attributes | Account, observed 2026-10-28 |
-| Distance to flood hazard by location | TBD | TBD | TBD | 2 credits per call | TBD | TBD | US only |  | Account, observed 2026-10-28 |
-| Property attributes by address: one named attribute | [Property Attributes v2 sample URL](https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/PropertyInformation/ByAddressv2/sample_url.html); [query parameters](https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/PropertyInformation/ByAddressv2/query_param.html) | `GET /property/v2/attributes/byaddress?address=...&attributes=...` | TBD | 1 credit per requested attribute + 0.01 credit for PBKey; `attributes=all` charges 1 credit per attribute (approximately 50) | TBD | TBD | TBD | Request named attributes only; verify charging on 1 record before any batch. The v1 `/property/v1/all/...` endpoint is deprecated. | Account, observed 2026-10-28 |
-| Fire station | TBD | TBD | TBD | 6 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
-| Fire risk | TBD | TBD | TBD | 9 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
-| Crime | TBD | TBD | TBD | 2 credits per call | TBD | TBD | TBD | Recorded; excluded on fairness | Account, observed 2026-10-28 |
-| Earthquake | TBD | TBD | TBD | 2 credits per call | TBD | TBD | TBD | Recorded; not selected | Account, observed 2026-10-28 |
+| Address verification/standardization: ValidateMailingAddress / Pro / Premium | Not used in full run | Not used in full run | Smoke-tested; excluded | 1 credit per US address; 0.33 per USCAN address | Not used | Premium provides parsed elements, match codes, coordinates | US price documented | Defective address returned Status F “Address Not Found” and was charged | Account and smoke test, observed 2026-10-28 |
+| Geocoding forward: Premium | Docs mapping appendix | `/geocode/v1/premium/geocode` | Enabled; full run | 1 credit per call | No; one address per request | `candidates[].precisionCode`; `precisionLevel`; `HPNTSCZA` suffix | US full run | GET; S5/S7/S8 with standardized state matching input is eligible | Full run, observed 2026-10-29 |
+| Geocoding forward: Advanced / Basic | Docs mapping appendix | Advanced endpoint not used; Basic used for comparison | Smoke-tested; Basic comparison used | Advanced 0.5; Basic 0.1 credit per call | No; one address per request | `candidates[].precisionCode`; `precisionLevel` | US full run | GET | Smoke test and full run, observed 2026-10-29 |
+| PreciselyID by address | Geocode/PreciselyID/byPreciselyID/resp_desc.html | `/geocode/v1/key/byaddress` | Enabled; returned for 39/170 eligible records | 0.01 credit | Not used | `key`, `matchedAddress` | US full run | Returned for address points only; not all eligible street-interpolated matches | Full run, observed 2026-10-29 |
+| Key lookup | Not used | Not used | Not used | 0.01 credit documented | Not used | Not used | Not used | Not part of selected workflow | Account, observed 2026-10-28 |
+| Flood by location: flood zone code, flood risk level, base flood elevation | Risk API documentation from Phase 0 | `/risks/v1/flood/bylocation?latitude&longitude&includeZoneDesc&includeGeometry` | Enabled; 170/170 eligible records | 5 credits per call | Not used | `floodZone.code`, `riskLevel`, `baseFloodElevation.unit/value` and documented related fields | US full run | BFE returned for 56/170 high-risk records | Full run, observed 2026-10-29 |
+| Distance to flood hazard by location | Risk API documentation from Phase 0 | Location-based distance endpoint | Enabled; 170/170 eligible records | 2 credits per call | Not used | Distance and water-body fields | US full run |  | Full run, observed 2026-10-29 |
+| Property attributes by address: one named attribute | [Property Attributes v2 sample URL](https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/PropertyInformation/ByAddressv2/sample_url.html); [query parameters](https://docs.precisely.com/docs/sftw/precisely-apis/main/en-us/webhelp/apis/PropertyInformation/ByAddressv2/query_param.html) | `GET /property/v2/attributes/byaddress?address=...&attributes=...` | Enabled; `builtYear` returned 13/170 | 1 credit per requested attribute + 0.01 PBKey | Not used | `propertyAttributes.builtYear` | US full run | Coverage gap confirmed by an ALL-CAPS control test; use named attributes only. v1 endpoint deprecated. | Full run, observed 2026-10-29 |
+| Fire station | Not used | Not used | Not used | 6 credits per call documented | Not used | Not used | Not used | Recorded; not selected | Account, observed 2026-10-28 |
+| Fire risk | Not used | Not used | Not used | 9 credits per call documented | Not used | Not used | Not used | Recorded; not selected | Account, observed 2026-10-28 |
+| Crime | Not used | Not used | Not used | 2 credits per call documented | Not used | Not used | Not used | Excluded on fairness grounds | Account, observed 2026-10-28 |
+| Earthquake | Not used | Not used | Not used | 2 credits per call documented | Not used | Not used | Not used | Recorded; not selected | Account, observed 2026-10-28 |
 
 ### Geocoder behavior on defective input
 
@@ -189,31 +189,55 @@ available products or fields until confirmed.
 
 | Attribute | Business decision it supports | Supports Risk 1 or Risk 2? | Available? | Definition/units | Fairness concern (Y/N) | Selected? |
 |---|---|---|---|---|---|---|
-| Flood zone code | Compare hazard category at coarse versus verified location for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
-| Flood risk level | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
-| Base flood elevation | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
-| Distance to flood hazard | Support location-risk review for Risk 2 | Risk 2 | TBD | TBD | TBD | Yes |
-| `builtYear` | TBD | TBD | TBD | TBD | TBD | Yes |
+| Flood zone code | Compare hazard category at coarse versus verified location for Risk 2 | Risk 2 | Yes, 170/170 | FEMA zone code; compare base code and risk tier | No | Yes |
+| Flood risk level | Support location-risk review for Risk 2 | Risk 2 | Yes, 170/170 | API risk tier | No | Yes |
+| Base flood elevation | Support location-risk review for Risk 2 | Risk 2 | Yes, 56/170 | API value and unit; normally available in high-risk zones | No | Yes |
+| Distance to flood hazard | Support location-risk review for Risk 2 | Risk 2 | Yes, 170/170 | Distance and returned unit | No | Yes |
+| `builtYear` | Property context for underwriting review | Risk 2 | Yes, 13/170 | Year built; substantial coverage gap | No | Yes |
 
 ## 7. LLM option check
 
-| Option | Free-tier access | Data-retention terms link | Laptop feasibility | Decision |
+| Option | Verified terms and access | Retention / data handling | Laptop feasibility | Decision |
 |---|---|---|---|---|
-| Gemini | TBD | TBD | TBD | TBD |
-| Groq | TBD | TBD | TBD | TBD |
-| Hugging Face | TBD | TBD | TBD | TBD |
-| Ollama | TBD | TBD | TBD | TBD |
+| Gemini API | Free tier; prompts/responses used to improve products; terms effective 2026-03-23 advise against confidential information | Human review possible | Hosted | Excluded |
+| Groq | Free plan $0; Llama models Enterprise-only; selected `openai/gpt-oss-120b` (30 RPM, 1K RPD, 8K TPM, 200K TPD) | Services Agreement §4.2 (modified 2026-06-22) prohibits training on inputs/outputs; console says up to 30-day storage since 2025-10-15 unless ZDR enabled; Global ZDR enabled | Hosted | Chosen |
+| Hugging Face Inference Providers | Approximately $0.10/month free credit | Provider-dependent terms | Hosted | Excluded |
+| Ollama local model | No hosted free tier required | Local processing | Impractical on 8 GB RAM; no GPU | Excluded |
 
 ## 8. Open questions and blockers
 
-| Question or blocker | Owner / next action | Status | Source / notes |
+| Question or blocker | Resolution | Status | Source / notes |
 |---|---|---|---|
-| TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD |
-| TBD | TBD | TBD | TBD |
+| Pricing model for API use | Trial credit metering; selected operation costs and observed full-run usage recorded below | Resolved | Account dashboard, observed 2026-10-29 |
+| Property-data coverage gap | `builtYear` returned 13/170; ALL-CAPS control confirmed missing values are coverage, not address casing | Resolved; limitation disclosed | Full run, observed 2026-10-29 |
+| PreciselyID eligibility | Returned for 39/170 and only for address-point matches | Resolved | Full run, observed 2026-10-29 |
+| Licensing approach | Row-level Precisely outputs remain private; observe April 2021 Acceptable Use Policy §§4.1–4.2 | Resolved | Project licensing decision |
+| Remaining blockers | None blocking | Resolved | Full run complete |
+
+## Full run findings (2026-10-29)
+
+- 200 records processed: 170 eligible (S5/S7/S8 and standardized state matched
+  input); 30 manual review (18 street-level only, 11 postal/city level, 1
+  location conflict).
+- Premium postal/city-level fallbacks were billed at the Basic rate (0.1):
+  11 × 0.9 = 9.9 credits reconciled between ledger and dashboard.
+- Empty `{}` responses were not charged; content-bearing “not found” answers
+  were charged.
+- PreciselyID returned for 39/170 eligible records (address points only).
+  `builtYear` returned for 13/170; the property coverage gap was confirmed with
+  an ALL-CAPS control test. Flood zone/risk/distance returned for 170/170;
+  BFE returned for 56/170 (high-risk zones).
+- Dashboard balance: 838.80 credits left.
+
+### Credit calculator remediation addendum
+
+After resolving manual-review exceptions, budget up to 30 Premium re-verification
+calls (≤30 × 1 credit), enrichment of recovered records (≤30 × 7 credits, plus
+property hits), for a maximum of approximately 270 credits. Under the 2,150
+credit hard cap, projected ledger room is approximately 479 credits.
 
 ## 9. Phase 0 exit criteria
 
-- [ ] API verification checklist completed or blockers recorded.
-- [ ] No speculative API calls.
-- [ ] Visibility approval remains separate.
+- [x] API verification checklist completed; no blocking API issues remain.
+- [x] Calls were limited to documented operations and planned full-run stages.
+- [x] Repository visibility approval remains separate from this API discovery.
