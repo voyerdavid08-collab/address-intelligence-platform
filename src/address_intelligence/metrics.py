@@ -645,7 +645,7 @@ def compute_before_after_metrics(
         rows.append(
             _metric(
                 "Standardization vs ground truth",
-                f"Same street address, ZIP differs from reference: {group_name}",
+                f"Same street address, ZIP missing or different from reference: {group_name}",
                 after_count,
                 len(group),
                 "ground_truth",
@@ -893,6 +893,8 @@ def write_before_after_report(
     for row in rows:
         sections.setdefault(row["section"], []).append(row)
     lines = [
+        "# Before/after summary",
+        "",
         "aggregates only; row-level Precisely outputs are not published (AUP §4.1–4.2)",
         "Before/after counts use the input population as the top-level denominator.",
         "",

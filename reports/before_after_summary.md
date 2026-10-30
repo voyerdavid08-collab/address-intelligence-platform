@@ -1,3 +1,5 @@
+# Before/after summary
+
 aggregates only; row-level Precisely outputs are not published (AUP §4.1–4.2)
 Before/after counts use the input population as the top-level denominator.
 
@@ -52,9 +54,9 @@ Before/after counts use the input population as the top-level denominator.
 | City name matches reference: clean records | 124/124 (100.0%) | 122/124 (98.4%) | 122 | 124 | ground_truth |
 | City name matches reference: dirty records | 64/76 (84.2%) | 73/76 (96.1%) | 73 | 76 | ground_truth |
 | City name matches reference: defect: city_typo | 0/12 (0.0%) | 10/12 (83.3%) | 10 | 12 | ground_truth |
-| Same street address, ZIP differs from reference: all records | 20/200 (10.0%) | 1/200 (0.5%) | 1 | 200 | ground_truth |
-| Same street address, ZIP differs from reference: clean records | 0/124 (0.0%) | 0/124 (0.0%) | 0 | 124 | ground_truth |
-| Same street address, ZIP differs from reference: dirty records | 20/76 (26.3%) | 1/76 (1.3%) | 1 | 76 | ground_truth |
+| Same street address, ZIP missing or different from reference: all records | 20/200 (10.0%) | 1/200 (0.5%) | 1 | 200 | ground_truth |
+| Same street address, ZIP missing or different from reference: clean records | 0/124 (0.0%) | 0/124 (0.0%) | 0 | 124 | ground_truth |
+| Same street address, ZIP missing or different from reference: dirty records | 20/76 (26.3%) | 1/76 (1.3%) | 1 | 76 | ground_truth |
 
 City is reported separately, not as part of the building test: street + ZIP identify the building, and official place names vary (for 2 clean records Precisely returns the municipality, Coral Gables, where the reference uses the mailing city, Miami).
 

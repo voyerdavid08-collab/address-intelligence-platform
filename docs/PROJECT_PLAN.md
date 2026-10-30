@@ -41,7 +41,7 @@ portfolio.
 | R6 | Write a one-page VP of Operations business impact summary that communicates the business problem, quantifies two relevant risks in cost or revenue terms, explains how the proposed solution mitigates them, and explains the incremental value of AI beyond enrichment. | `docs/BUSINESS_IMPACT.md` with all financial inputs labelled as measured, sourced, or assumed; optional PDF export. |
 | R7 | Everything runs locally on a laptop using free-tier services; no cloud infrastructure required. | Reproducible local setup and run instructions; no AWS, Azure, or GCP dependency. |
 | R8 | Precisely free trial is described as 2,500 credits valid for 30 days; plan use and do not exhaust credits during exploration. | Written budget gate, measured/verified credit assumptions before calls, and a conservative execution plan. |
-| R9 | Deliver a public GitHub repository containing runnable commented code or notebook, README with setup, `.env` key structure and sample outputs; before/after CSV or Excel with summary stats; and the one-page impact summary. | Repository contents and final checklist. The current repository is private; changing it to public is a publication/visibility change and must be explicitly approved before it is made. |
+| R9 | Deliver a public GitHub repository containing runnable commented code or notebook, README with setup, `.env` key structure and sample outputs; before/after CSV or Excel workbook (`reports/before_after_workbook.xlsx`) with summary stats; and the one-page impact summary. | Repository contents and final checklist. The current repository is private; changing it to public is a publication/visibility change and must be explicitly approved before it is made. |
 
 ### Explicit requirements versus scope boundaries
 
@@ -797,6 +797,9 @@ assumptions and keep visibility unchanged until authorized.
   records, or any inability to meet the requirement is explicitly disclosed.
 - [ ] Before/after output and summary metrics include match/standardization
   measures and coordinate coverage with clear denominators.
+- [ ] E1b: Build the public workbook with synthetic example rows only and the
+  private, complete workbook for secure reviewer sharing; keep the private file
+  under `data/output/` and out of version control.
 - [ ] API/fixture/simulated/synthetic provenance is visible and unambiguous.
 - [ ] One focused AI capability is functional, tested, and evidence-grounded;
   limitations and human-review boundary are stated.

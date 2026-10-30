@@ -36,9 +36,9 @@ Standardization vs ground truth,City name matches reference: all records,188/200
 Standardization vs ground truth,City name matches reference: clean records,124/124 (100.0%),122/124 (98.4%),122,124,ground_truth
 Standardization vs ground truth,City name matches reference: dirty records,64/76 (84.2%),73/76 (96.1%),73,76,ground_truth
 Standardization vs ground truth,City name matches reference: defect: city_typo,0/12 (0.0%),10/12 (83.3%),10,12,ground_truth
-Standardization vs ground truth,"Same street address, ZIP differs from reference: all records",20/200 (10.0%),1/200 (0.5%),1,200,ground_truth
-Standardization vs ground truth,"Same street address, ZIP differs from reference: clean records",0/124 (0.0%),0/124 (0.0%),0,124,ground_truth
-Standardization vs ground truth,"Same street address, ZIP differs from reference: dirty records",20/76 (26.3%),1/76 (1.3%),1,76,ground_truth
+Standardization vs ground truth,"Same street address, ZIP missing or different from reference: all records",20/200 (10.0%),1/200 (0.5%),1,200,ground_truth
+Standardization vs ground truth,"Same street address, ZIP missing or different from reference: clean records",0/124 (0.0%),0/124 (0.0%),0,124,ground_truth
+Standardization vs ground truth,"Same street address, ZIP missing or different from reference: dirty records",20/76 (26.3%),1/76 (1.3%),1,76,ground_truth
 Coordinate coverage,Building-level coordinates (S5/S7/S8; includes 1 record held for state conflict),n/a,171/200 (85.5%),171,200,precisely_api
 Coordinate coverage,Street-level coordinates only,n/a,18/200 (9.0%),18,200,precisely_api
 Coordinate coverage,City/postal-level coordinates only,n/a,11/200 (5.5%),11,200,precisely_api

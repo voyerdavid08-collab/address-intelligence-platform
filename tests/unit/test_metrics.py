@@ -325,7 +325,7 @@ def test_zip_difference_metric_requires_street_and_city_match(tmp_path):
     metric = _find(
         rows,
         "Standardization vs ground truth",
-        "Same street address, ZIP differs from reference: dirty records",
+        "Same street address, ZIP missing or different from reference: dirty records",
     )
     assert metric["after"] == "1/1 (100.0%)"
 
