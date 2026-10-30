@@ -26,6 +26,7 @@ class Settings:
     log_level: str
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
+    remediation_model: str = "openai/gpt-oss-20b"
     groq_daily_token_budget: int = 180000
     remediation_samples: int = 5
     conformal_alpha: float = 0.10
@@ -102,6 +103,9 @@ class Settings:
             log_level=log_level,
             groq_api_key=value("GROQ_API_KEY", "") or None,
             groq_model=value("GROQ_MODEL", "openai/gpt-oss-120b"),
+            remediation_model=value(
+                "REMEDIATION_MODEL", "openai/gpt-oss-20b"
+            ),
             groq_daily_token_budget=groq_daily_token_budget,
             remediation_samples=remediation_samples,
             conformal_alpha=conformal_alpha,
@@ -129,6 +133,7 @@ class Settings:
             f"trial_credits={self.trial_credits!r}, "
             f"groq_api_key={'****' if self.groq_api_key else None!r}, "
             f"groq_model={self.groq_model!r}, "
+            f"remediation_model={self.remediation_model!r}, "
             f"groq_daily_token_budget={self.groq_daily_token_budget!r}, "
             f"remediation_samples={self.remediation_samples!r}, "
             f"conformal_alpha={self.conformal_alpha!r}, "

@@ -63,14 +63,22 @@ def test_trial_credits_must_be_positive(monkeypatch, tmp_path):
 def test_groq_settings_load_and_secret_is_masked(monkeypatch, tmp_path):
     monkeypatch.setenv("GROQ_API_KEY", "groq-private-value")
     monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    monkeypatch.setenv("REMEDIATION_MODEL", "openai/gpt-oss-20b")
     monkeypatch.setenv("GROQ_DAILY_TOKEN_BUDGET", "180000")
 
     settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
 
     assert settings.groq_api_key == "groq-private-value"
     assert settings.groq_model == "openai/gpt-oss-120b"
+    assert settings.remediation_model == "openai/gpt-oss-20b"
     assert settings.groq_daily_token_budget == 180000
     assert "groq-private-value" not in repr(settings)
+
+
+def test_remediation_model_defaults_to_gpt_oss_20b(monkeypatch, tmp_path):
+    monkeypatch.delenv("REMEDIATION_MODEL", raising=False)
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+    assert settings.remediation_model == "openai/gpt-oss-20b"
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "invalid"])

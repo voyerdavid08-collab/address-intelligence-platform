@@ -518,6 +518,14 @@ is not model validation.
 
 For manual-review records, a separate, human-gated workflow will:
 
+The diagnosis taxonomy groups `missing_house_number` and synthetic
+`nonexistent_address` under `house_number_issue`: the latter represents an
+out-of-range house number, so both defects indicate a house number absent from
+the street's address range. The submitted-address features
+`house_number_present` and `zip_present` are computed locally; geocoder
+component flags describe the matched candidate and are not proof those values
+were submitted.
+
 1. **Diagnose:** sample K=5 classifications per record (each sample may return
    one or two distinct cause labels); use
    `1 − frequency(label)/K` as the nonconformity score, then split-conformal

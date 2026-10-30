@@ -23,7 +23,6 @@ from address_intelligence.narrative import (
     NarrativeGenerator,
     _json_hash,
     _load_daily_usage,
-    _safe_http_error_reason,
     _token_estimate,
     _write_daily_usage,
 )
@@ -39,7 +38,7 @@ REMEDIATION_OUTPUT_PATH = RUN_ROOT / "remediation_diagnosis.jsonl"
 REMEDIATION_CACHE_ROOT = RUN_ROOT / "cache" / "remediation"
 REPORT_MD_PATH = PROJECT_ROOT / "reports" / "remediation_calibration.md"
 REPORT_CSV_PATH = PROJECT_ROOT / "reports" / "remediation_calibration.csv"
-PROMPT_VERSION = "address-cause-diagnosis-v2"
+PROMPT_VERSION = "address-cause-diagnosis-v4"
 RANDOM_SEED = 42
 MAX_COMPLETION_TOKENS = 300
 
@@ -47,16 +46,15 @@ CAUSE_LABELS = (
     "street_name_issue",
     "city_issue",
     "zip_issue",
-    "missing_house_number",
-    "address_not_found",
+    "house_number_issue",
 )
 GROUND_TRUTH_CAUSES = {
     "street_typo": "street_name_issue",
     "city_typo": "city_issue",
     "missing_zip": "zip_issue",
     "wrong_zip": "zip_issue",
-    "missing_house_number": "missing_house_number",
-    "nonexistent_address": "address_not_found",
+    "missing_house_number": "house_number_issue",
+    "nonexistent_address": "house_number_issue",
 }
 UNDETECTABLE_CAUSE = "missing_unit"
 COMPONENT_POSITIONS = {
@@ -74,6 +72,7 @@ PRECISION_CATEGORIES = {
     "no_match": "no match",
 }
 REPORT_COLUMNS = ("metric", "value")
+_SAFE_IDENTIFIER = re.compile(r"[A-Za-z0-9_.-]{1,80}")
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -126,13 +125,19 @@ def build_model_input(
     policy: dict[str, str], precision_code: str | None
 ) -> dict[str, Any]:
     """Construct the strict submitted-address and derived-match allowlist."""
+    submitted_line1 = policy.get("raw_address_line1", "").strip()
+    submitted_zip5 = policy.get("raw_zip5", "").strip()
     return {
         "submitted_address": {
-            "line1": policy.get("raw_address_line1", ""),
+            "line1": submitted_line1,
             "line2": policy.get("raw_address_line2", ""),
             "city": policy.get("raw_city", ""),
             "state": policy.get("raw_state", ""),
-            "zip5": policy.get("raw_zip5", ""),
+            "zip5": submitted_zip5,
+        },
+        "submitted_features": {
+            "house_number_present": bool(re.match(r"^\s*\d+\b", submitted_line1)),
+            "zip_present": bool(submitted_zip5),
         },
         "match_signals": {
             "precision_category": precision_category(precision_code),
@@ -214,12 +219,67 @@ def calculate_test_metrics(
     }
 
 
+def top_answer_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compare each record's most frequent cause against its set of true causes."""
+    per_cause: dict[str, dict[str, int]] = {
+        cause: {"correct": 0, "total": 0} for cause in CAUSE_LABELS
+    }
+    confusion: Counter[tuple[str, str]] = Counter()
+    correct_records = 0
+    for record in records:
+        frequencies = record["frequencies"]
+        if not record.get("valid_samples", 0) or not any(frequencies.values()):
+            continue
+        predicted = max(
+            CAUSE_LABELS, key=lambda cause: frequencies.get(cause, 0)
+        )
+        true_causes = record["true_causes"]
+        if predicted in true_causes:
+            correct_records += 1
+        for true_cause in true_causes:
+            per_cause[true_cause]["total"] += 1
+            if predicted == true_cause:
+                per_cause[true_cause]["correct"] += 1
+            confusion[(true_cause, predicted)] += 1
+
+    return {
+        "top_answer_correct": correct_records,
+        "top_answer_total": len(records),
+        "top_answer_accuracy": (
+            correct_records / len(records) if records else 0.0
+        ),
+        "per_cause_accuracy": {
+            cause: {
+                **counts,
+                "accuracy": (
+                    counts["correct"] / counts["total"]
+                    if counts["total"]
+                    else 0.0
+                ),
+            }
+            for cause, counts in per_cause.items()
+            if counts["total"]
+        },
+        "confusion_table": [
+            {
+                "true_cause": true_cause,
+                "predicted_cause": predicted_cause,
+                "count": count,
+            }
+            for (true_cause, predicted_cause), count in sorted(confusion.items())
+        ],
+    }
+
+
 def _request_messages(model_input: dict[str, Any]) -> list[dict[str, str]]:
     system = (
         "Classify the likely cause of the submitted synthetic address defect "
         "using only the submitted address and derived match signals. Return "
         "one or two distinct taxonomy labels as strict JSON. Do not output an address, "
-        "coordinates, identifiers, explanations, or facts not provided."
+        "coordinates, identifiers, explanations, or facts not provided. "
+        "Component match flags describe the matched candidate and may show a "
+        "house number as matched even when none was submitted; rely on "
+        "house_number_present for whether the submitted address included one."
     )
     user = (
         f"Prompt version: {PROMPT_VERSION}\n"
@@ -237,17 +297,77 @@ def _validate_causes(content: str) -> list[str]:
     if not isinstance(result, dict) or set(result) != {"causes"}:
         raise NarrativeAPIError("invalid_response_schema")
     causes = result["causes"]
-    if (
-        not isinstance(causes, list)
-        or not 1 <= len(causes) <= 2
-        or any(
-            not isinstance(cause, str) or cause not in CAUSE_LABELS
-            for cause in causes
-        )
-        or len(set(causes)) != len(causes)
+    if not isinstance(causes, list) or not 1 <= len(causes) <= 2:
+        raise NarrativeAPIError("invalid cause count")
+    if any(
+        not isinstance(cause, str) or cause not in CAUSE_LABELS
+        for cause in causes
     ):
-        raise NarrativeAPIError("invalid_cause_labels")
+        raise NarrativeAPIError("invalid cause label")
+    if len(set(causes)) != len(causes):
+        raise NarrativeAPIError("invalid cause count")
     return causes
+
+
+def _safe_groq_error_reason(
+    response: Any, payload: dict[str, Any], api_key: str | None
+) -> str:
+    """Capture a bounded provider message without echoing request data or secrets."""
+    identifiers = []
+    message = ""
+    try:
+        body = response.json()
+    except (ValueError, TypeError):
+        body = {}
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        error = body["error"]
+        for key in ("type", "code"):
+            value = error.get(key)
+            if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", value):
+                if value not in identifiers:
+                    identifiers.append(value)
+        candidate = error.get("message")
+        if isinstance(candidate, str):
+            message = candidate
+
+    redactions: set[str] = set()
+
+    def collect_strings(value: Any) -> None:
+        if isinstance(value, str):
+            if value:
+                redactions.add(value)
+            input_marker = "Input: "
+            if input_marker in value:
+                try:
+                    collect_strings(json.loads(value.split(input_marker, 1)[1]))
+                except json.JSONDecodeError:
+                    pass
+        elif isinstance(value, dict):
+            for nested in value.values():
+                collect_strings(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_strings(nested)
+
+    collect_strings(payload)
+    if api_key:
+        redactions.add(api_key)
+    for value in sorted(redactions, key=len, reverse=True):
+        message = message.replace(value, "[redacted]")
+    message = message[:300]
+    safe_identifiers = []
+    for identifier in identifiers:
+        for value in sorted(redactions, key=len, reverse=True):
+            identifier = identifier.replace(value, "[redacted]")
+        if _SAFE_IDENTIFIER.fullmatch(identifier):
+            safe_identifiers.append(identifier)
+
+    reason = f"HTTP {response.status_code}"
+    if safe_identifiers:
+        reason += " " + "/".join(safe_identifiers)
+    if message:
+        reason += f": {message}"
+    return reason
 
 
 class RemediationDiagnoser:
@@ -339,7 +459,7 @@ class RemediationDiagnoser:
         key = _json_hash(
             {
                 "prompt_version": PROMPT_VERSION,
-                "model": self.settings.groq_model,
+                "model": self.settings.remediation_model,
                 "input": model_input,
                 "sample_index": sample_index,
             }
@@ -366,7 +486,12 @@ class RemediationDiagnoser:
                     calls += 1
                     estimated_tokens += estimate
         today = datetime.now(timezone.utc).date().isoformat()
-        tokens_used = _load_daily_usage(self.daily_usage_path, today)
+        tokens_used = _load_daily_usage(
+            self.daily_usage_path,
+            today,
+            self.settings.remediation_model,
+            legacy_model=self.settings.groq_model,
+        )
         return {
             "labelled_records": len(records),
             "calibration_records": len(calibration),
@@ -392,7 +517,12 @@ class RemediationDiagnoser:
             records = records[:limit]
         calibration, test = stratified_split(records)
         today = datetime.now(timezone.utc).date().isoformat()
-        tokens_used = _load_daily_usage(self.daily_usage_path, today)
+        tokens_used = _load_daily_usage(
+            self.daily_usage_path,
+            today,
+            self.settings.remediation_model,
+            legacy_model=self.settings.groq_model,
+        )
         sampled_records: list[dict[str, Any]] = []
         stopped_for_budget = False
 
@@ -421,7 +551,13 @@ class RemediationDiagnoser:
                     continue
                 if provenance == "api":
                     tokens_used += sampled["tokens"]
-                    _write_daily_usage(self.daily_usage_path, today, tokens_used)
+                    _write_daily_usage(
+                        self.daily_usage_path,
+                        today,
+                        self.settings.remediation_model,
+                        tokens_used,
+                        legacy_model=self.settings.groq_model,
+                    )
                 try:
                     if sampled.get("finish_reason") == "length":
                         raise NarrativeAPIError("truncated_response")
@@ -493,7 +629,7 @@ class RemediationDiagnoser:
                 "prediction_set": record["prediction_set"],
                 "singleton": record["singleton"],
                 "split": record["split"],
-                "model": self.settings.groq_model,
+                "model": self.settings.remediation_model,
                 "model_reported": record["model_reported"],
                 "sample_tokens": record["sample_tokens"],
                 "valid_samples": record["valid_samples"],
@@ -543,6 +679,7 @@ class RemediationDiagnoser:
             "uninformative_quantile_warning": warning,
             "complete": complete,
             **metrics,
+            **(top_answer_metrics(sampled_records) if complete else {}),
             "tokens_used_today": tokens_used,
             "tokens_remaining_today": max(
                 0, self.settings.groq_daily_token_budget - tokens_used
@@ -571,7 +708,7 @@ class RemediationDiagnoser:
         if estimated_tokens > self.settings.groq_daily_token_budget - tokens_used:
             raise DailyBudgetReached
         payload = {
-            "model": self.settings.groq_model,
+            "model": self.settings.remediation_model,
             "messages": messages,
             "temperature": 1.0,
             "max_completion_tokens": MAX_COMPLETION_TOKENS,
@@ -590,9 +727,6 @@ class RemediationDiagnoser:
                                     "type": "string",
                                     "enum": list(CAUSE_LABELS),
                                 },
-                                "minItems": 1,
-                                "maxItems": 2,
-                                "uniqueItems": True,
                             }
                         },
                         "required": ["causes"],
@@ -625,7 +759,9 @@ class RemediationDiagnoser:
                 raise NarrativeAPIError("request_error") from None
             if 200 <= response.status_code < 300:
                 break
-            reason = _safe_http_error_reason(response)
+            reason = _safe_groq_error_reason(
+                response, payload, self.settings.groq_api_key
+            )
             if attempt == 0 and (
                 response.status_code == 429 or response.status_code >= 500
             ):
@@ -678,6 +814,9 @@ class RemediationDiagnoser:
                 "records_with_fewer_than_k_valid_samples",
                 summary["records_with_fewer_than_k_valid_samples"],
             ),
+            ("top_answer_correct", summary["top_answer_correct"]),
+            ("top_answer_total", summary["top_answer_total"]),
+            ("top_answer_accuracy", summary["top_answer_accuracy"]),
             ("alpha", summary["alpha"]),
             ("q_hat", summary["quantile"]),
             ("test_contains_all_true_labels", summary["contains_all_true_labels"]),
@@ -689,6 +828,21 @@ class RemediationDiagnoser:
             ("singleton_share", summary["singleton_share"]),
             ("uninformative_q_hat", summary["uninformative_quantile_warning"]),
         ]
+        rows.extend(
+            (
+                f"per_cause_{cause}_{metric}",
+                value,
+            )
+            for cause, counts in summary["per_cause_accuracy"].items()
+            for metric, value in counts.items()
+        )
+        rows.extend(
+            (
+                f"confusion_{row['true_cause']}_to_{row['predicted_cause']}",
+                row["count"],
+            )
+            for row in summary["confusion_table"]
+        )
         self.report_csv_path.parent.mkdir(parents=True, exist_ok=True)
         with self.report_csv_path.open(
             "w", newline="", encoding="utf-8"
@@ -703,6 +857,10 @@ class RemediationDiagnoser:
             "Aggregate split-conformal evaluation; no address-level records or "
             "Precisely response values are included.",
             "",
+            "The taxonomy maps both missing house numbers and synthetic "
+            "nonexistent addresses to `house_number_issue`: the synthetic "
+            "nonexistent case is an out-of-range house number.",
+            "",
             f"- Labelled records: {summary['labelled_records']}",
             f"- Calibration / test: {summary['calibration_records']} / "
             f"{summary['test_records']}",
@@ -712,22 +870,54 @@ class RemediationDiagnoser:
             f"- Samples failed: {summary['samples_failed']}",
             f"- Records with fewer than K valid samples: "
             f"{summary['records_with_fewer_than_k_valid_samples']}",
-            f"- Alpha: {summary['alpha']}",
-            f"- q-hat: {summary['quantile']}",
-            f"- Test set contains all true causes: "
-            f"{summary['contains_all_true_labels']:.3f}",
-            f"- Test set contains at least one true cause: "
-            f"{summary['contains_at_least_one_true_label']:.3f}",
-            f"- Mean prediction-set size: "
-            f"{summary['mean_prediction_set_size']:.3f}",
-            f"- Singleton prediction-set share: {summary['singleton_share']:.3f}",
-            f"- Uninformative q-hat warning: "
-            f"{summary['uninformative_quantile_warning']}",
+            f"- Top-answer accuracy: {summary['top_answer_correct']}/"
+            f"{summary['top_answer_total']} "
+            f"({summary['top_answer_accuracy']:.3f})",
             "",
-            "Missing-unit-only records are excluded because the submitted address "
-            "and geocoder precision/match signals do not reveal whether a unit "
-            "was omitted or mismatched.",
+            "## Top-answer accuracy by true cause",
+            "",
+            "| True cause | Correct | Total | Accuracy |",
+            "|---|---:|---:|---:|",
         ]
+        lines.extend(
+            f"| {cause} | {counts['correct']} | {counts['total']} | "
+            f"{counts['accuracy']:.3f} |"
+            for cause, counts in summary["per_cause_accuracy"].items()
+        )
+        lines.extend(
+            [
+                "",
+                "## Confusion table (true cause vs most frequent prediction)",
+                "",
+                "| True cause | Predicted cause | Count |",
+                "|---|---|---:|",
+            ]
+        )
+        lines.extend(
+            f"| {row['true_cause']} | {row['predicted_cause']} | "
+            f"{row['count']} |"
+            for row in summary["confusion_table"]
+        )
+        lines.extend(
+            [
+                f"- Alpha: {summary['alpha']}",
+                f"- q-hat: {summary['quantile']}",
+                f"- Test set contains all true causes: "
+                f"{summary['contains_all_true_labels']:.3f}",
+                f"- Test set contains at least one true cause: "
+                f"{summary['contains_at_least_one_true_label']:.3f}",
+                f"- Mean prediction-set size: "
+                f"{summary['mean_prediction_set_size']:.3f}",
+                f"- Singleton prediction-set share: "
+                f"{summary['singleton_share']:.3f}",
+                f"- Uninformative q-hat warning: "
+                f"{summary['uninformative_quantile_warning']}",
+                "",
+                "Missing-unit-only records are excluded because the submitted "
+                "address and geocoder precision/match signals do not reveal "
+                "whether a unit was omitted or mismatched.",
+            ]
+        )
         self.report_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

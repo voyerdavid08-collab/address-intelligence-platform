@@ -312,17 +312,52 @@ def _safe_http_error_reason(response: Any) -> str:
     return reason
 
 
-def _load_daily_usage(path: Path, today: str) -> int:
+def _load_daily_usage(
+    path: Path,
+    today: str,
+    model: str,
+    *,
+    legacy_model: str | None = None,
+) -> int:
     if not path.exists():
         return 0
     stored = json.loads(path.read_text(encoding="utf-8"))
-    return int(stored["tokens"]) if stored.get("date") == today else 0
+    if stored.get("date") != today:
+        return 0
+    models = stored.get("models")
+    if isinstance(models, dict):
+        return int(models.get(model, 0))
+    if legacy_model == model:
+        return int(stored.get("tokens", 0))
+    return 0
 
 
-def _write_daily_usage(path: Path, today: str, tokens: int) -> None:
+def _write_daily_usage(
+    path: Path,
+    today: str,
+    model: str,
+    tokens: int,
+    *,
+    legacy_model: str | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        stored = {}
+    models = stored.get("models", {}) if stored.get("date") == today else {}
+    if not isinstance(models, dict):
+        models = {}
+    if (
+        stored.get("date") == today
+        and not stored.get("models")
+        and legacy_model
+        and int(stored.get("tokens", 0))
+    ):
+        models[legacy_model] = int(stored["tokens"])
+    models[model] = tokens
     path.write_text(
-        json.dumps({"date": today, "tokens": tokens}, sort_keys=True) + "\n",
+        json.dumps({"date": today, "models": models}, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -413,7 +448,10 @@ class NarrativeGenerator:
                 estimated_tokens += _token_estimate(_request_messages(evidence))
                 estimated_tokens += MAX_COMPLETION_TOKENS
         today = datetime.now(timezone.utc).date().isoformat()
-        tokens_used = _load_daily_usage(self.daily_usage_path, today)
+        tokens_used = _load_daily_usage(
+            self.daily_usage_path, today, self.settings.groq_model,
+            legacy_model=self.settings.groq_model,
+        )
         return {
             **routes,
             "estimated_tokens": estimated_tokens,
@@ -429,7 +467,10 @@ class NarrativeGenerator:
         selected = self._records(limit)
         output_records = self._existing_output()
         today = datetime.now(timezone.utc).date().isoformat()
-        tokens_used = _load_daily_usage(self.daily_usage_path, today)
+        tokens_used = _load_daily_usage(
+            self.daily_usage_path, today, self.settings.groq_model,
+            legacy_model=self.settings.groq_model,
+        )
         processed = {"template": 0, "abstained": 0, "generated": 0, "rejected_by_guardrail": 0, "failed": 0}
         stopped_for_budget = False
 
@@ -465,7 +506,13 @@ class NarrativeGenerator:
                         )
                     if provenance == "api":
                         tokens_used += response_data["tokens"]
-                        _write_daily_usage(self.daily_usage_path, today, tokens_used)
+                        _write_daily_usage(
+                            self.daily_usage_path,
+                            today,
+                            self.settings.groq_model,
+                            tokens_used,
+                            legacy_model=self.settings.groq_model,
+                        )
                     try:
                         validated = validate_model_result(
                             response_data["content"], evidence, not_available

@@ -1,13 +1,18 @@
 import csv
 import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from address_intelligence.config import ConfigError, Settings
 from address_intelligence.remediation import (
     MAX_COMPLETION_TOKENS,
+    PROMPT_VERSION,
+    NarrativeAPIError,
     RemediationDiagnoser,
+    _safe_groq_error_reason,
+    _validate_causes,
     build_model_input,
     build_prediction_set,
     calculate_test_metrics,
@@ -16,10 +21,16 @@ from address_intelligence.remediation import (
     parse_precision_match_flags,
     precision_category,
     stratified_split,
+    top_answer_metrics,
 )
+from address_intelligence.narrative import _load_daily_usage, _write_daily_usage
 
 
-def _settings(*, samples=5, alpha=0.10, budget=180000):
+def _settings(
+    *, samples=5, alpha=0.10, budget=180000,
+    groq_model="openai/gpt-oss-120b",
+    remediation_model="openai/gpt-oss-20b",
+):
     return Settings(
         api_key=None,
         api_secret=None,
@@ -28,7 +39,8 @@ def _settings(*, samples=5, alpha=0.10, budget=180000):
         trial_credits=Decimal("2500"),
         log_level="INFO",
         groq_api_key="groq-test-secret",
-        groq_model="openai/gpt-oss-120b",
+        groq_model=groq_model,
+        remediation_model=remediation_model,
         groq_daily_token_budget=budget,
         remediation_samples=samples,
         conformal_alpha=alpha,
@@ -111,9 +123,26 @@ def _diagnoser(tmp_path, *, labels=None, **kwargs):
 def test_taxonomy_maps_multiple_defects_and_excludes_missing_unit_only():
     assert map_ground_truth_causes(
         "street_typo;wrong_zip,missing_zip;missing_house_number"
-    ) == {"street_name_issue", "zip_issue", "missing_house_number"}
+    ) == {"street_name_issue", "zip_issue", "house_number_issue"}
+    assert map_ground_truth_causes("nonexistent_address") == {"house_number_issue"}
     assert map_ground_truth_causes("missing_unit") == set()
     assert map_ground_truth_causes("city_typo;missing_unit") == {"city_issue"}
+    assert PROMPT_VERSION == "address-cause-diagnosis-v4"
+
+
+def test_v3_first_attempt_report_is_preserved_as_aggregates():
+    report_path = (
+        Path(__file__).resolve().parents[2]
+        / "reports"
+        / "remediation_calibration_v3_first_attempt.md"
+    )
+    report = report_path.read_text(encoding="utf-8")
+    assert "q-hat: 1.0" in report
+    assert "Top-answer accuracy: 52 / 68" in report
+    assert "Failed samples: 25" in report
+    assert "street_name_issue | 12 | 20" in report
+    normalized_report = " ".join(report.split())
+    assert "No addresses, policy identifiers, or Precisely response values" in normalized_report
 
 
 def test_precision_categories_and_suffix_component_matches():
@@ -146,10 +175,22 @@ def test_precision_categories_and_suffix_component_matches():
         "zip": False,
     }
     model_input = build_model_input(
-        {"raw_address_line1": "12 Example St"}, "Z1"
+        {"raw_address_line1": "12 Example St", "raw_zip5": "12345"}, "Z1"
     )
     assert set(model_input["match_signals"]["component_matches"].values()) == {
         "unknown"
+    }
+    assert model_input["submitted_features"] == {
+        "house_number_present": True,
+        "zip_present": True,
+    }
+
+    absent_features = build_model_input(
+        {"raw_address_line1": "Example St", "raw_zip5": ""}, "S4-PN-S--A"
+    )["submitted_features"]
+    assert absent_features == {
+        "house_number_present": False,
+        "zip_present": False,
     }
 
 
@@ -167,9 +208,17 @@ def test_model_input_allowlist_uses_only_submitted_and_derived_signals():
         "S8HPN-S--A",
     )
     serialized = json.dumps(model_input)
-    assert set(model_input) == {"submitted_address", "match_signals"}
+    assert set(model_input) == {
+        "submitted_address",
+        "submitted_features",
+        "match_signals",
+    }
     assert "12 Example St" in serialized
     assert "NOT-SENT" not in serialized
+    assert model_input["submitted_features"] == {
+        "house_number_present": True,
+        "zip_present": True,
+    }
     assert all(
         forbidden not in serialized.casefold()
         for forbidden in ("formattedstreetaddress", "coordinates", "preciselyid", "defects")
@@ -212,8 +261,7 @@ def test_prediction_set_and_test_coverage_metrics():
             "street_name_issue": 3,
             "city_issue": 2,
             "zip_issue": 0,
-            "missing_house_number": 0,
-            "address_not_found": 0,
+            "house_number_issue": 0,
         },
         5,
         0.6,
@@ -244,8 +292,7 @@ def test_two_cause_sample_frequency_can_cover_every_true_label():
         "street_name_issue": 1,
         "city_issue": 1,
         "zip_issue": 0,
-        "missing_house_number": 0,
-        "address_not_found": 0,
+        "house_number_issue": 0,
     }
     prediction = build_prediction_set(frequencies, 5, 0.8)
     record = {
@@ -257,6 +304,57 @@ def test_two_cause_sample_frequency_can_cover_every_true_label():
     assert calculate_test_metrics([record], {"multi"})[
         "contains_all_true_labels"
     ] == 1.0
+
+
+def test_top_answer_accuracy_per_cause_and_confusion_table():
+    metrics = top_answer_metrics(
+        [
+            {
+                "frequencies": {
+                    "street_name_issue": 4,
+                    "city_issue": 1,
+                    "zip_issue": 0,
+                    "house_number_issue": 0,
+                },
+                "true_causes": {"street_name_issue", "city_issue"},
+                "valid_samples": 5,
+            },
+            {
+                "frequencies": {
+                    "street_name_issue": 1,
+                    "city_issue": 4,
+                    "zip_issue": 0,
+                    "house_number_issue": 0,
+                },
+                "true_causes": {"city_issue"},
+                "valid_samples": 5,
+            },
+        ]
+    )
+    assert (metrics["top_answer_correct"], metrics["top_answer_total"]) == (2, 2)
+    assert metrics["per_cause_accuracy"]["street_name_issue"] == {
+        "correct": 1,
+        "total": 1,
+        "accuracy": 1.0,
+    }
+    assert metrics["per_cause_accuracy"]["city_issue"]["correct"] == 1
+    assert metrics["confusion_table"] == [
+        {
+            "true_cause": "city_issue",
+            "predicted_cause": "city_issue",
+            "count": 1,
+        },
+        {
+            "true_cause": "city_issue",
+            "predicted_cause": "street_name_issue",
+            "count": 1,
+        },
+        {
+            "true_cause": "street_name_issue",
+            "predicted_cause": "street_name_issue",
+            "count": 1,
+        },
+    ]
 
 
 def test_cache_key_includes_sample_index_and_dry_run_never_calls_network(tmp_path):
@@ -287,7 +385,7 @@ def test_execute_uses_one_call_per_sample_and_writes_aggregate_reports(tmp_path)
         @staticmethod
         def json():
             return {
-                "model": "openai/gpt-oss-120b",
+                "model": "openai/gpt-oss-20b",
                 "choices": [
                     {
                         "message": {
@@ -322,27 +420,36 @@ def test_execute_uses_one_call_per_sample_and_writes_aggregate_reports(tmp_path)
     assert len(calls) == 4
     assert all(call[1]["Authorization"] == "Bearer groq-test-secret" for call in calls)
     assert all(call[2]["temperature"] == 1.0 for call in calls)
+    assert all(call[2]["model"] == "openai/gpt-oss-20b" for call in calls)
     assert all(call[2]["max_completion_tokens"] == 300 for call in calls)
     assert all(call[2]["reasoning_effort"] == "low" for call in calls)
     assert all("n" not in call[2] for call in calls)
     assert all(call[2]["response_format"]["json_schema"]["strict"] for call in calls)
     causes_schema = calls[0][2]["response_format"]["json_schema"]["schema"]
     assert causes_schema["required"] == ["causes"]
-    assert causes_schema["properties"]["causes"]["minItems"] == 1
-    assert causes_schema["properties"]["causes"]["maxItems"] == 2
-    assert causes_schema["properties"]["causes"]["uniqueItems"] is True
+    assert set(causes_schema) == {
+        "type",
+        "properties",
+        "required",
+        "additionalProperties",
+    }
+    assert set(causes_schema["properties"]["causes"]) == {"type", "items"}
+    assert causes_schema["properties"]["causes"]["items"]["enum"]
     assert MAX_COMPLETION_TOKENS == 300
     for _, _, payload, _ in calls:
         sent = json.dumps(payload["messages"])
         assert "street_typo" not in sent
         assert "formattedStreetAddress" not in sent
         assert "DO NOT SEND" not in sent
+        assert "house_number_present" in sent
+        assert "may show a house number as matched" in sent
     output = [
         json.loads(line)
         for line in (tmp_path / "diagnosis.jsonl").read_text().splitlines()
     ]
     assert len(output) == 2
-    assert all(output_row["model_reported"] == ["openai/gpt-oss-120b"] * 2 for output_row in output)
+    assert all(output_row["model"] == "openai/gpt-oss-20b" for output_row in output)
+    assert all(output_row["model_reported"] == ["openai/gpt-oss-20b"] * 2 for output_row in output)
     assert output[0]["frequencies"]["street_name_issue"] == 2
     assert output[0]["frequencies"]["city_issue"] == 2
     assert "12 Example St" not in (tmp_path / "diagnosis.jsonl").read_text()
@@ -350,6 +457,64 @@ def test_execute_uses_one_call_per_sample_and_writes_aggregate_reports(tmp_path)
         tmp_path / "reports" / "remediation_calibration.md"
     ).read_text()
     assert (tmp_path / "reports" / "remediation_calibration.csv").exists()
+    report = (tmp_path / "reports" / "remediation_calibration.md").read_text()
+    assert "Top-answer accuracy" in report
+    assert "Confusion table" in report
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"causes":[]}',
+        '{"causes":["street_name_issue","city_issue","zip_issue"]}',
+        '{"causes":["street_name_issue","street_name_issue"]}',
+    ],
+)
+def test_invalid_cause_count_and_duplicates_fail_with_specific_reason(content):
+    with pytest.raises(NarrativeAPIError, match="invalid cause count"):
+        _validate_causes(content)
+
+
+def test_safe_error_reason_captures_truncated_message_without_request_or_key():
+    request_payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    'Prompt version: address-cause-diagnosis-v4\nInput: '
+                    '{"submitted_address":{"line1":"12 Example Street",'
+                    '"city":"Sample City"}}'
+                ),
+            },
+        ],
+    }
+
+    class ErrorResponse:
+        status_code = 400
+
+        @staticmethod
+        def json():
+            return {
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "json_validate_failed",
+                    "message": (
+                        "Rejected 12 Example Street, Sample City using "
+                        "secret-groq-key. " + ("x" * 400)
+                    ),
+                }
+            }
+
+    reason = _safe_groq_error_reason(
+        ErrorResponse(), request_payload, "secret-groq-key"
+    )
+    message = reason.split(": ", maxsplit=1)[1]
+    assert reason.startswith("HTTP 400 invalid_request_error/json_validate_failed:")
+    assert len(message) == 300
+    assert "12 Example Street" not in reason
+    assert "Sample City" not in reason
+    assert "secret-groq-key" not in reason
+    assert message.endswith("x")
 
 
 def test_truncated_and_invalid_json_samples_fail_without_frequency_counts(tmp_path):
@@ -474,3 +639,34 @@ def test_default_remediation_settings(monkeypatch, tmp_path):
     settings = Settings.from_env(dotenv_path=tmp_path / "none.env")
     assert settings.remediation_samples == 5
     assert settings.conformal_alpha == 0.10
+    assert settings.remediation_model == "openai/gpt-oss-20b"
+
+
+def test_daily_usage_for_one_model_does_not_consume_another_model_budget(tmp_path):
+    usage_path = tmp_path / "daily.json"
+    today = "2026-10-29"
+    _write_daily_usage(usage_path, today, "openai/gpt-oss-20b", 150000)
+
+    assert _load_daily_usage(
+        usage_path, today, "openai/gpt-oss-20b"
+    ) == 150000
+    assert _load_daily_usage(
+        usage_path, today, "openai/gpt-oss-120b"
+    ) == 0
+
+    legacy_path = tmp_path / "legacy-daily.json"
+    legacy_path.write_text(
+        json.dumps({"date": today, "tokens": 160000}), encoding="utf-8"
+    )
+    assert _load_daily_usage(
+        legacy_path,
+        today,
+        "openai/gpt-oss-20b",
+        legacy_model="openai/gpt-oss-120b",
+    ) == 0
+    assert _load_daily_usage(
+        legacy_path,
+        today,
+        "openai/gpt-oss-120b",
+        legacy_model="openai/gpt-oss-120b",
+    ) == 160000

@@ -424,7 +424,8 @@ def test_model_response_cache_hit_makes_no_second_call(tmp_path):
     assert first["generated"] == second["generated"] == 1
     assert output["status"] == "generated"
     assert output["tokens"] == 23
-    assert json.loads((tmp_path / "daily.json").read_text())["tokens"] == 23
+    usage = json.loads((tmp_path / "daily.json").read_text())
+    assert usage["models"]["openai/gpt-oss-120b"] == 23
     assert output["model"] == "openai/gpt-oss-120b"
     assert output["model_reported"] == "openai/gpt-oss-120b"
     assert output["missing_evidence"] == ["built_year"]
