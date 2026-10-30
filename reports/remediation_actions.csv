@@ -1,0 +1,24 @@
+metric,value
+run_status,dry-run planning only
+stage,verify
+records,30
+suggestions_made,0
+suggestions_valid,0
+suggestions_rejected,0
+verified,0
+verified_correct,0
+verified_incorrect,0
+not_verified,0
+no_suggestion,0
+customer_outreach_correct,0
+credits_used,0
+tokens_used,0
+groq_calls,0
+precisely_calls,0
+estimated_tokens,0
+planned_groq_calls,0
+planned_precisely_calls,16
+planned_precisely_credits,16
+action_customer_outreach,14
+action_analyst_review,16
+action_verification_pending,16

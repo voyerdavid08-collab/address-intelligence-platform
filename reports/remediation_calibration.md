@@ -1,27 +1,44 @@
-# Exception cause diagnosis calibration - v4 dry run
+# Exception cause diagnosis calibration
 
-No v4 model calls were made. These are run-planning counts only; q-hat,
-accuracy, confusion counts, and coverage remain pending. No address-level
-records or Precisely response values are included.
+Aggregate split-conformal evaluation; no address-level records or Precisely response values are included.
 
-- Taxonomy: `street_name_issue`, `city_issue`, `zip_issue`, and
-  `house_number_issue`
-- Detectable labelled records: 68
-- Diagnosis model: `openai/gpt-oss-20b`
-- Planned calibration / test split: 34 / 34
+The taxonomy maps both missing house numbers and synthetic nonexistent addresses to `house_number_issue`: the synthetic nonexistent case is an out-of-range house number.
+
+- Labelled records: 68
+- Calibration / test: 34 / 34
 - Missing-unit-only records excluded: 8
 - Samples per record: 5
-- Planned calls: 340 (0 cached)
-- Estimated tokens: 184,760
-- Daily budget remaining for `openai/gpt-oss-20b`: 180,000
-- Calls fit within this model's daily budget: No (184,760 estimated tokens)
+- Samples failed: 6
+- Records with fewer than K valid samples: 5
+- Top-answer accuracy: 62/68 (0.912)
 
-The diagnosis taxonomy groups missing house numbers and the synthetic
-nonexistent-address defect as `house_number_issue`: nonexistent addresses in
-this dataset use out-of-range house numbers, so both indicate a house number
-not found on the street.
+## Top-answer accuracy by true cause
 
-The eight missing-unit-only records remain excluded because submitted address
-fields and geocoder precision/component signals do not reveal whether a unit
-was omitted or mismatched. Historical v3 results are preserved in
-`remediation_calibration_v3_first_attempt.md`.
+| True cause | Correct | Total | Accuracy |
+|---|---:|---:|---:|
+| street_name_issue | 14 | 20 | 0.700 |
+| city_issue | 12 | 12 | 1.000 |
+| zip_issue | 22 | 26 | 0.846 |
+| house_number_issue | 14 | 18 | 0.778 |
+
+## Confusion table (true cause vs most frequent prediction)
+
+| True cause | Predicted cause | Count |
+|---|---|---:|
+| city_issue | city_issue | 12 |
+| house_number_issue | house_number_issue | 14 |
+| house_number_issue | street_name_issue | 4 |
+| street_name_issue | city_issue | 3 |
+| street_name_issue | street_name_issue | 14 |
+| street_name_issue | zip_issue | 3 |
+| zip_issue | city_issue | 4 |
+| zip_issue | zip_issue | 22 |
+- Alpha: 0.1
+- q-hat: 0.8
+- Test set contains all true causes: 0.941
+- Test set contains at least one true cause: 1.000
+- Mean prediction-set size: 1.382
+- Singleton prediction-set share: 0.794
+- Uninformative q-hat warning: False
+
+Missing-unit-only records are excluded because the submitted address and geocoder precision/match signals do not reveal whether a unit was omitted or mismatched.
