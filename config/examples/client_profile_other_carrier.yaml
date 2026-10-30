@@ -1,0 +1,49 @@
+# Example profile for a made-up second carrier, used only in unit tests.
+client:
+  name: "Example regional carrier (synthetic)"
+  country: "US"
+
+input:
+  path: "fixtures/other_carrier.csv"
+  id_column: "contract_ref"
+  column_mapping:
+    policy_id: "contract_ref"
+    address_line1: "street_primary"
+    address_line2: "street_secondary"
+    city: "municipality"
+    state: "region_code"
+    zip5: "postal"
+    metro: "market"
+
+verification:
+  eligible_precision_prefixes: ["S5", "S7", "S8"]
+
+enrichment:
+  operations:
+    - name: "flood_by_location"
+      enabled: true
+    - name: "distance_to_flood_hazard_by_location"
+      enabled: true
+    - name: "property_attributes_v2"
+      enabled: true
+      attributes: ["builtYear"]
+  preciselyid_by_address:
+    enabled: true
+
+comparison:
+  enabled: true
+  sample_size: 40
+  seed: 20261029
+
+ai:
+  narratives:
+    enabled: true
+  remediation:
+    enabled: true
+    samples: 5
+    conformal_alpha: 0.10
+
+data_handling:
+  publish_row_level: false
+  retention_days: 30
+  note: "Made-up example profile for isolated tests; no API use."

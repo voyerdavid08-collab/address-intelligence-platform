@@ -13,6 +13,12 @@ import time
 from typing import Any, Callable
 from email.utils import parsedate_to_datetime
 
+from address_intelligence.client_profile import (
+    DEFAULT_PROFILE_PATH,
+    ClientProfile,
+    load_client_profile,
+    read_client_policies,
+)
 from address_intelligence.config import Settings
 from address_intelligence.credits import CreditCapExceeded, CreditLedger, PRICE_TABLE
 from address_intelligence.providers.precisely import PreciselyClient, ProviderResponse
@@ -77,21 +83,37 @@ class PlannedRequest:
     request_mode: str = "default"
 
 
-def _read_policies(path: Path) -> list[dict[str, str]]:
+def _read_policies(
+    path: Path,
+    profile: ClientProfile | None = None,
+) -> list[dict[str, str]]:
+    selected_profile = profile or load_client_profile()
+    if path == selected_profile.input_path:
+        return read_client_policies(selected_profile)
     with path.open(newline="", encoding="utf-8-sig") as source:
         reader = csv.DictReader(source)
-        required = {
-            "policy_id",
-            "metro",
-            "raw_address_line1",
-            "raw_address_line2",
-            "raw_city",
-            "raw_state",
-            "raw_zip5",
+        mapping = selected_profile.column_mapping
+        missing = sorted(set(mapping.values()) - set(reader.fieldnames or ()))
+        if missing:
+            raise ValueError(
+                f"Client input is missing mapped column(s): {', '.join(missing)}."
+            )
+        rows = []
+        internal_names = {
+            "policy_id": "policy_id",
+            "address_line1": "raw_address_line1",
+            "address_line2": "raw_address_line2",
+            "city": "raw_city",
+            "state": "raw_state",
+            "zip5": "raw_zip5",
+            "metro": "metro",
         }
-        if not required.issubset(reader.fieldnames or ()):
-            raise ValueError("Synthetic policy input is missing required columns.")
-        return list(reader)
+        for source_row in reader:
+            row = dict(source_row)
+            for canonical, source_name in mapping.items():
+                row[internal_names[canonical]] = source_row[source_name]
+            rows.append(row)
+        return rows
 
 
 def _address(
@@ -169,6 +191,7 @@ def haversine_km(
 def _geocode_reason(
     response: ProviderResponse,
     expected_state: str | None = None,
+    eligible_prefixes: tuple[str, ...] = ("S5", "S7", "S8"),
 ) -> tuple[str, str]:
     if response.status_code != 200:
         return "manual_review", "API error"
@@ -176,7 +199,7 @@ def _geocode_reason(
     if candidate is None:
         return "manual_review", "no match"
     code = candidate.get("precisionCode")
-    if isinstance(code, str) and code.startswith(("S5", "S7", "S8")):
+    if isinstance(code, str) and code.startswith(eligible_prefixes):
         if expected_state is not None:
             address = candidate.get("address")
             returned_state = (
@@ -237,10 +260,11 @@ class StagedPipeline:
         ledger: CreditLedger,
         *,
         client: PreciselyClient | None = None,
-        input_path: Path = INPUT_PATH,
+        input_path: Path | None = None,
         project_root: Path = PROJECT_ROOT,
         seed: int = COMPARISON_SEED,
         geocode_input_mode: str = "structured",
+        profile: ClientProfile | None = None,
     ) -> None:
         if geocode_input_mode not in GEOCODE_INPUT_MODES:
             raise ValueError(
@@ -249,15 +273,27 @@ class StagedPipeline:
         self.settings = settings
         self.ledger = ledger
         self.client = client
-        self.input_path = input_path
+        self.profile = profile or load_client_profile()
+        self.input_path = input_path or self.profile.input_path
         self.project_root = project_root
         self.output_root = project_root / "data" / "output" / "run"
         self.cache_root = self.output_root / "cache"
         self.results_path = self.output_root / "results_rowlevel.csv"
-        self.seed = seed
+        self.seed = self.profile.comparison_seed if profile is not None else seed
+        self.comparison_sample_size = self.profile.comparison_sample_size
         self.geocode_input_mode = geocode_input_mode
         self._run_provenance: dict[tuple[str, str], str] = {}
         self._run_responses: dict[tuple[str, str], ProviderResponse] = {}
+
+    def _eligible(self, response: ProviderResponse, state: str) -> bool:
+        return (
+            _geocode_reason(
+                response,
+                state,
+                self.profile.eligible_precision_prefixes,
+            )[0]
+            == "eligible"
+        )
 
     def _cache_path(self, request: PlannedRequest) -> Path:
         return self.cache_root / request.cache_operation / f"{request.policy_id}.json"
@@ -500,13 +536,21 @@ class StagedPipeline:
         if not base["standardized_address_line1"].strip():
             raise ValueError("Cannot create property request: missing standardized street.")
         address = _std_address(base)
+        operation = next(
+            item
+            for item in self.profile.data["enrichment"]["operations"]
+            if item["name"] == "property_attributes_v2"
+        )
+        attributes = ",".join(operation.get("attributes", ["builtYear"]))
+        if not attributes:
+            raise ValueError("property_attributes_v2 requires at least one attribute.")
         return PlannedRequest(
             row["policy_id"],
             "property_attributes_v2",
             "property_attributes_v2",
-            {"address": address, "attributes": "builtYear"},
+            {"address": address, "attributes": attributes},
             lambda client, address=address: client.property_attributes_by_address(
-                address, "builtYear"
+                address, attributes
             ),
         )
 
@@ -523,7 +567,7 @@ class StagedPipeline:
             response = self._load_geocode(row)
             if (
                 response is not None
-                and _geocode_reason(response, row["raw_state"])[0] == "eligible"
+                and self._eligible(response, row["raw_state"])
             ):
                 eligible.append((row, response))
         return eligible
@@ -536,9 +580,9 @@ class StagedPipeline:
         for item in eligible:
             grouped.setdefault(item[0]["metro"], []).append(item)
         metros = sorted(grouped)
-        if not metros:
+        if not metros or not self.profile.comparison_enabled:
             return []
-        target = min(COMPARISON_SAMPLE_SIZE, len(eligible))
+        target = min(self.comparison_sample_size, len(eligible))
         base, remainder = divmod(target, len(metros))
         rng = random.Random(self.seed)
         selected = []
@@ -558,7 +602,7 @@ class StagedPipeline:
     def plan(self, stage: str, *, limit: int | None = None) -> list[PlannedRequest]:
         if stage not in STAGES:
             raise ValueError(f"stage must be one of {', '.join(STAGES)}.")
-        rows = _read_policies(self.input_path)
+        rows = _read_policies(self.input_path, self.profile)
         if limit is not None:
             if limit <= 0:
                 raise ValueError("limit must be a positive integer.")
@@ -570,10 +614,11 @@ class StagedPipeline:
                 for row in rows
             ]
         elif stage == "preciselyid":
-            for row, geocode in self._eligible_records(rows):
-                base = _row_from_geocode(row["policy_id"], geocode.data)
-                if base["standardized_address_line1"].strip():
-                    requests.append(self._preciselyid_request(row, geocode.data))
+            if self.profile.operation_enabled("preciselyid_by_address"):
+                for row, geocode in self._eligible_records(rows):
+                    base = _row_from_geocode(row["policy_id"], geocode.data)
+                    if base["standardized_address_line1"].strip():
+                        requests.append(self._preciselyid_request(row, geocode.data))
         elif stage == "enrich":
             for row, geocode in self._eligible_records(rows):
                 candidate = _candidate(geocode.data)
@@ -586,16 +631,23 @@ class StagedPipeline:
                     if base["standardized_address_line1"].strip()
                     else None
                 )
-                enrich_requests = [
-                    self._flood_request(row, point),
-                    self._distance_request(row, point),
-                ]
-                if property_request is not None:
+                enrich_requests = []
+                if self.profile.operation_enabled("flood_by_location"):
+                    enrich_requests.append(self._flood_request(row, point))
+                if self.profile.operation_enabled("distance_to_flood_hazard_by_location"):
+                    enrich_requests.append(self._distance_request(row, point))
+                if (
+                    property_request is not None
+                    and self.profile.operation_enabled("property_attributes_v2")
+                ):
                     enrich_requests.append(property_request)
-                requests.extend(
-                    enrich_requests
-                )
+                requests.extend(enrich_requests)
         else:
+            if (
+                not self.profile.comparison_enabled
+                or not self.profile.operation_enabled("flood_by_location")
+            ):
+                return []
             selected = self._compare_sample(self._eligible_records(rows))
             for row, _geocode in selected:
                 verified = self._load_geocode(row)
@@ -686,7 +738,25 @@ class StagedPipeline:
         *,
         limit: int | None = None,
     ) -> Decimal:
-        rows = _read_policies(self.input_path)
+        if stage == "preciselyid" and not self.profile.operation_enabled(
+            "preciselyid_by_address"
+        ):
+            return Decimal("0")
+        if stage == "enrich" and not any(
+            self.profile.operation_enabled(operation)
+            for operation in (
+                "flood_by_location",
+                "distance_to_flood_hazard_by_location",
+                "property_attributes_v2",
+            )
+        ):
+            return Decimal("0")
+        if stage == "compare" and (
+            not self.profile.comparison_enabled
+            or not self.profile.operation_enabled("flood_by_location")
+        ):
+            return Decimal("0")
+        rows = _read_policies(self.input_path, self.profile)
         selected_rows = rows[:limit] if limit is not None else rows
         before = self.ledger.cumulative_spent
         requests = self.plan(stage, limit=limit)
@@ -756,6 +826,7 @@ class StagedPipeline:
                 eligibility, reason = _geocode_reason(
                     geocode,
                     policy["raw_state"],
+                    self.profile.eligible_precision_prefixes,
                 )
                 result["eligibility"] = eligibility
                 result["manual_review_reason"] = reason
@@ -774,7 +845,10 @@ class StagedPipeline:
                 has_standardized_street = bool(
                     result["standardized_address_line1"].strip()
                 )
-                if has_standardized_street:
+                if (
+                    has_standardized_street
+                    and self.profile.operation_enabled("preciselyid_by_address")
+                ):
                     preciselyid_request = self._preciselyid_request(
                         policy, geocode.data
                     )
@@ -793,20 +867,39 @@ class StagedPipeline:
                             ("preciselyid_by_address", policy["policy_id"]), "cached"
                         )
                 else:
-                    result["preciselyid_status"] = "failed: missing standardized street"
-                    result["preciselyid_provenance"] = "failed"
+                    if self.profile.operation_enabled("preciselyid_by_address"):
+                        result["preciselyid_status"] = "failed: missing standardized street"
+                        result["preciselyid_provenance"] = "failed"
+                    else:
+                        result["preciselyid_status"] = "disabled"
+                        result["preciselyid_provenance"] = "disabled"
                 point = _coordinates(_candidate(geocode.data))
                 if point is not None:
-                    flood_request = self._flood_request(policy, point)
-                    flood = self._response_for(flood_request)
-                    distance_request = self._distance_request(policy, point)
-                    distance = self._response_for(distance_request)
+                    flood = None
+                    distance = None
                     property_response = None
-                    if has_standardized_street:
+                    responses: list[ProviderResponse | None] = []
+                    response_keys: list[tuple[str, str]] = []
+                    if self.profile.operation_enabled("flood_by_location"):
+                        flood = self._response_for(self._flood_request(policy, point))
+                        responses.append(flood)
+                        response_keys.append(("flood_by_location", policy["policy_id"]))
+                    if self.profile.operation_enabled("distance_to_flood_hazard_by_location"):
+                        distance = self._response_for(self._distance_request(policy, point))
+                        responses.append(distance)
+                        response_keys.append(
+                            ("distance_to_flood_hazard_by_location", policy["policy_id"])
+                        )
+                    if (
+                        has_standardized_street
+                        and self.profile.operation_enabled("property_attributes_v2")
+                    ):
                         property_request = self._property_request(
                             policy, geocode.data
                         )
                         property_response = self._response_for(property_request)
+                        responses.append(property_response)
+                        response_keys.append(("property_attributes_v2", policy["policy_id"]))
                     if flood:
                         _apply_flood(result, flood.data)
                     if distance:
@@ -816,26 +909,37 @@ class StagedPipeline:
                             _nested(property_response.data, "propertyAttributes", "builtYear")
                             or ""
                         )
-                    enrich_responses = (flood, distance, property_response)
-                    result["enrich_status"] = _aggregate_status(enrich_responses)
-                    if not has_standardized_street:
+                    result["enrich_status"] = (
+                        _aggregate_status(tuple(responses)) if responses else "disabled"
+                    )
+                    if not has_standardized_street and responses:
                         result["enrich_status"] = (
                             "failed: missing standardized street"
                         )
-                    result["enrich_provenance"] = _aggregate_provenance(
-                        self._run_provenance,
-                        (
-                            ("flood_by_location", policy["policy_id"]),
-                            ("distance_to_flood_hazard_by_location", policy["policy_id"]),
-                            ("property_attributes_v2", policy["policy_id"]),
-                        ),
-                        enrich_responses,
+                    result["enrich_provenance"] = (
+                        _aggregate_provenance(
+                            self._run_provenance,
+                            tuple(response_keys),
+                            tuple(responses),
+                        )
+                        if responses
+                        else "disabled"
                     )
-                    if not has_standardized_street:
+                    if not has_standardized_street and responses:
                         result["enrich_provenance"] = "failed"
                 else:
-                    result["enrich_status"] = "failed"
-                    result["enrich_provenance"] = "failed"
+                    any_enrichment_enabled = any(
+                        self.profile.operation_enabled(operation)
+                        for operation in (
+                            "flood_by_location",
+                            "distance_to_flood_hazard_by_location",
+                            "property_attributes_v2",
+                        )
+                    )
+                    result["enrich_status"] = (
+                        "failed" if any_enrichment_enabled else "disabled"
+                    )
+                    result["enrich_provenance"] = result["enrich_status"]
                 result["preciselyid_status"] = result["preciselyid_status"] or ""
                 result["compare_status"] = ""
                 result["compare_provenance"] = ""
@@ -866,7 +970,7 @@ class StagedPipeline:
             geocode = self._load_geocode(policy)
             if (
                 geocode is not None
-                and _geocode_reason(geocode, policy["raw_state"])[0] == "eligible"
+                and self._eligible(geocode, policy["raw_state"])
             ):
                 eligible.append((policy, geocode))
         for policy, _ in self._compare_sample(eligible):
@@ -1114,7 +1218,7 @@ def print_plan_and_gate(
 def run_pipeline(
     argv: list[str] | None = None,
     *,
-    input_path: Path = INPUT_PATH,
+    input_path: Path | None = None,
     project_root: Path = PROJECT_ROOT,
 ) -> int:
     import argparse
@@ -1123,6 +1227,7 @@ def run_pipeline(
     parser.add_argument("--stage", choices=STAGES, required=True)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--profile", type=Path, default=None)
     parser.add_argument(
         "--geocode-input",
         choices=GEOCODE_INPUT_MODES,
@@ -1132,7 +1237,12 @@ def run_pipeline(
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
-    settings = Settings.from_env()
+    profile = load_client_profile(args.profile)
+    settings = (
+        Settings.from_env(profile_path=args.profile)
+        if args.profile is not None
+        else Settings.from_env()
+    )
     ledger = CreditLedger(settings.credit_hard_cap)
     pipeline = StagedPipeline(
         settings,
@@ -1140,6 +1250,7 @@ def run_pipeline(
         input_path=input_path,
         project_root=project_root,
         geocode_input_mode=args.geocode_input,
+        profile=profile,
     )
     requests, estimate = print_plan_and_gate(pipeline, args.stage, limit=args.limit)
     if estimate > ledger.remaining:

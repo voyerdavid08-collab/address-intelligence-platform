@@ -32,10 +32,18 @@ class Settings:
     conformal_alpha: float = 0.10
 
     @classmethod
-    def from_env(cls, *, dotenv_path: str | Path | None = None) -> "Settings":
+    def from_env(
+        cls,
+        *,
+        dotenv_path: str | Path | None = None,
+        profile_path: str | Path | None = None,
+    ) -> "Settings":
         """Load settings from process environment and an optional local .env."""
+        from address_intelligence.client_profile import load_client_profile
+
         path = Path(dotenv_path) if dotenv_path is not None else PROJECT_ROOT / ".env"
         dotenv_settings = dotenv_values(path)
+        profile = load_client_profile(profile_path)
 
         def value(key: str, default: str) -> str:
             process_value = os.environ.get(key)
@@ -76,7 +84,9 @@ class Settings:
                 "GROQ_DAILY_TOKEN_BUDGET must be a positive integer."
             )
 
-        samples_value = value("REMEDIATION_SAMPLES", "5")
+        samples_value = value(
+            "REMEDIATION_SAMPLES", str(profile.remediation_samples)
+        )
         try:
             remediation_samples = int(samples_value)
         except ValueError:
@@ -86,7 +96,7 @@ class Settings:
         if remediation_samples <= 0:
             raise ConfigError("REMEDIATION_SAMPLES must be a positive integer.")
 
-        alpha_value = value("CONFORMAL_ALPHA", "0.10")
+        alpha_value = value("CONFORMAL_ALPHA", str(profile.conformal_alpha))
         try:
             conformal_alpha = float(alpha_value)
         except ValueError:
