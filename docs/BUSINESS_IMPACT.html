@@ -1,0 +1,411 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><title>Address Intelligence Brief</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one US Letter sheet in a consulting one-pager idiom. Action title, KPI tiles, a 2-column risk matrix with row labels, an AI process (chevrons + proportional outcome bar), next-step callout, source line. Single light look for print. System fonts that embed cleanly in PDF. */
+:root {
+  --navy: #0b2341;
+  --navy-2: #163a63;
+  --accent: #12a3b4;
+  --accent-tint: #e5f5f7;
+  --ink: #1b2733;
+  --muted: #5d6b79;
+  --rule: #dde4ea;
+  --panel: #f4f7f9;
+  --paper: #ffffff;
+  --ground: #e9eef2;
+  --loss: #d0402b;
+  --loss-tint: #fbebe8;
+  --gain: #1c9a67;
+  --gain-tint: #e6f5ee;
+  --amber: #e5a03a;
+  --f-sans: "Segoe UI", Calibri, Arial, "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { margin: 0; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--f-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, p { margin: 0; }
+.sheet {
+  background: var(--paper);
+  max-width: 816px;
+  margin: 0 auto;
+  box-shadow: 0 2px 4px rgba(11, 35, 65, .06), 0 12px 32px rgba(11, 35, 65, .10);
+  padding: 0;
+}
+.content { display: grid; gap: 15px; padding: 15px 36px 22px; }
+svg.lucide { width: 1em; height: 1em; stroke-width: 2; flex: none; }
+.label {
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+/* Top bar + title */
+.topbar {
+  background: var(--navy);
+  color: #ffffff;
+  padding: 9px 36px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.topbar .label { color: #8fd3dc; }
+.topbar .who { font-size: 10px; color: #c7d3e0; }
+.title { display: grid; gap: 7px; }
+.title h1 {
+  font-weight: 700;
+  font-size: 23px;
+  line-height: 1.18;
+  letter-spacing: -.01em;
+  color: var(--navy);
+}
+.title h1 em { font-style: normal; color: var(--accent); }
+.title .dek { color: var(--muted); font-size: 12.5px; }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kpi {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 11px 12px;
+  background: var(--panel);
+  border-top: 3px solid var(--gain);
+}
+.kpi .ico {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--paper); color: var(--gain);
+  font-size: 17px;
+}
+.kpi.cost { border-top-color: var(--amber); }
+.kpi.cost .ico { color: var(--amber); }
+.kpi.rev { border-top-color: var(--loss); }
+.kpi.rev .ico { color: var(--loss); }
+.kpi .num {
+  font-weight: 700;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--navy);
+}
+.kpi .num small { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.kpi .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; display: block; }
+
+/* Risk matrix */
+.matrix {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 2px solid var(--navy);
+}
+.matrix > div { padding: 8px 10px; border-bottom: 1px solid var(--rule); min-width: 0; }
+.matrix .rh {
+  font-weight: 700; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--navy); padding-left: 0; display: flex; align-items: flex-start; gap: 8px; line-height: 1.25;
+}
+.matrix .rh svg { font-size: 17px; color: var(--accent); margin-top: -1px; }
+
+/* Mini workflow: what one flawed address costs */
+.mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin-top: 7px; }
+.mini .ms {
+  background: var(--panel); border-top: 2px solid var(--amber);
+  padding: 5px 6px; display: grid; gap: 1px; align-content: start;
+}
+.mini .ms svg { font-size: 13px; color: #9a6413; }
+.mini .ms b { font-size: 10px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+.mini .ms span { font-size: 9px; color: var(--muted); line-height: 1.25; }
+.mini .ms em { font-style: normal; font-weight: 700; color: #9a6413; font-size: 10px; }
+.knock { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; font-size: 9.8px; color: var(--muted); }
+.knock span { display: inline-flex; align-items: flex-start; gap: 4px; }
+.knock svg { font-size: 12px; color: var(--loss); margin-top: 1px; }
+.matrix .ch { display: flex; align-items: center; gap: 8px; padding-block: 9px; }
+.matrix .ch .chip {
+  font-weight: 700; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 2px; white-space: nowrap;
+}
+.chip.cost { background: #fdf3e3; color: #9a6413; }
+.chip.rev { background: var(--loss-tint); color: var(--loss); }
+.matrix .ch h2 { font-weight: 700; font-size: 13px; color: var(--navy); line-height: 1.25; }
+.matrix .corner { border-bottom: 1px solid var(--rule); }
+.big { font-weight: 700; font-size: 22px; letter-spacing: -.01em; color: var(--navy); font-variant-numeric: tabular-nums lining-nums; }
+.big small { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.calc { font-size: 10.5px; color: var(--muted); line-height: 1.45; margin-top: 3px; }
+.t { font-weight: 700; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; padding: 1px 4px; border-radius: 2px; vertical-align: 1px; white-space: nowrap; }
+.t.m { background: var(--accent-tint); color: #0b7482; }
+.t.s { background: #ecebe6; color: #5f5a48; }
+.t.a { background: var(--loss-tint); color: var(--loss); }
+.cellp { font-size: 11.5px; }
+.result {
+  display: flex; gap: 7px; align-items: flex-start;
+  font-weight: 600; font-size: 11.5px; color: var(--gain);
+}
+.result svg { font-size: 14px; margin-top: 1px; }
+
+/* Zone bar */
+.zbar { display: flex; height: 12px; margin-top: 6px; }
+.zbar span { height: 100%; }
+.z-ok { background: #c7d2dc; }
+.z-under { background: var(--loss); }
+.z-over { background: var(--amber); }
+.zleg { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 9.5px; color: var(--muted); margin-top: 4px; }
+.zleg i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; vertical-align: -.5px; }
+.sowhat { font-size: 10.5px; font-weight: 600; color: var(--loss); margin-top: 5px; }
+
+/* AI section */
+.ai { display: grid; gap: 10px; }
+.ai-head { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: center; }
+.ai-head .ico {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--navy); color: #ffffff; display: grid; place-items: center; font-size: 20px;
+}
+.ai-head .label { color: var(--accent); }
+.ai-head p { font-weight: 600; font-size: 13.5px; line-height: 1.35; color: var(--navy); text-wrap: pretty; }
+.chev { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.step {
+  position: relative;
+  background: var(--navy);
+  color: #ffffff;
+  padding: 8px 18px 8px 22px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 7px; align-items: center;
+  min-height: 46px;
+}
+.step:first-child { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); padding-left: 12px; }
+.step:nth-child(2) { background: var(--navy-2); }
+.step.ai-step { background: var(--accent); }
+.step:nth-child(4) { background: #0f7f8c; }
+.step svg { font-size: 16px; }
+.step b { display: block; font-size: 11px; font-weight: 700; }
+.step span { font-size: 9.5px; opacity: .9; line-height: 1.25; display: block; }
+
+.outcome { display: grid; gap: 6px; }
+.bhead { display: grid; gap: 1px; margin-top: 6px; }
+.bhead .label { color: var(--navy); font-size: 10px; letter-spacing: .1em; }
+.bhead .bsub { font-size: 10px; color: var(--ink); }
+.obar { display: flex; height: 26px; gap: 2px; }
+.obar > div {
+  display: flex; align-items: center; gap: 6px; padding: 0 9px;
+  color: #ffffff; font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden;
+}
+.obar svg { font-size: 13px; }
+.o1 { background: var(--navy); }
+.o2 { background: var(--gain); }
+.o3 { background: #8b9aa8; }
+.okeys { display: grid; grid-template-columns: 47fr 20fr 33fr; gap: 2px; }
+.okeys div { font-size: 10px; color: var(--muted); line-height: 1.35; padding-right: 8px; }
+.okeys b { color: var(--ink); font-weight: 600; }
+.zero {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  color: var(--navy);
+  padding: 5px 10px; font-size: 10.5px; font-weight: 500;
+}
+.zero b { font-weight: 700; }
+.zero svg { font-size: 14px; color: var(--accent); }
+
+/* Bottom */
+.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 12px; }
+.also { display: grid; gap: 5px; }
+.also .row { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; font-size: 11px; align-items: start; }
+.also svg { font-size: 14px; color: var(--navy); margin-top: 1px; }
+.also b { font-weight: 700; color: var(--navy); }
+.next {
+  background: var(--navy); color: #ffffff;
+  padding: 11px 14px;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 11px; align-items: center;
+}
+.next .ico { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; font-size: 15px; }
+.next .label { color: #8fd3dc; display: block; margin-bottom: 2px; }
+.next p { font-size: 11.5px; line-height: 1.4; }
+.next p b { font-weight: 700; }
+.src { font-size: 8.5px; color: var(--muted); line-height: 1.45; border-top: 1px solid var(--rule); padding-top: 7px; }
+.src b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 680px) {
+  .content { padding: 14px 16px 18px; }
+  .topbar { padding: 9px 16px; }
+  .kpis, .bottom, .chev { grid-template-columns: 1fr; }
+  .step, .step:first-child { clip-path: none; padding-left: 12px; }
+  .matrix { grid-template-columns: 1fr; }
+  .matrix .rh { padding-top: 12px; border-bottom: 0; }
+  .matrix .corner { display: none; }
+  .okeys { grid-template-columns: 1fr; }
+  .title h1 { font-size: 20px; }
+}
+@media print {
+  @page { size: letter; margin: 0; }
+  body { background: var(--paper); padding: 0; }
+  .sheet { box-shadow: none; max-width: none; width: 8.5in; min-height: 11in; }
+  .content { padding: 7px .45in 6px; gap: 6px; }
+  .sowhat { font-size: 9.8px; margin-top: 3px; }
+  .matrix .ch { padding-block: 7px; }
+  .topbar { padding-inline: .45in; padding-block: 7px; }
+  .title h1 { font-size: 20px; }
+  .title .dek { font-size: 11.2px; }
+  .kpi { padding: 7px 11px; }
+  .kpi .num { font-size: 22px; }
+  .matrix > div { padding-block: 5px; }
+  .mini { margin-top: 4px; }
+  .mini .ms { padding: 3px 6px; }
+  .knock { margin-top: 3px; }
+  .step { min-height: 38px; }
+  .zero { padding: 4px 10px; }
+  .next { padding: 8px 12px; }
+  .also { gap: 3px; }
+  .ai-head .ico { width: 34px; height: 34px; font-size: 17px; }
+  .ai-head { grid-template-columns: 34px minmax(0, 1fr); }
+  .obar { height: 22px; }
+  .big { font-size: 20px; }
+  .ai { gap: 8px; }
+  .step { min-height: 42px; padding-block: 6px; }
+  .src { font-size: 7.3px; padding-top: 5px; }
+  .cellp, .result { font-size: 10.8px; }
+  .calc { font-size: 9.8px; }
+  .kpi .lbl, .okeys div { font-size: 9.8px; }
+  .ai-head p { font-size: 12.8px; }
+  .also .row, .next p { font-size: 10.5px; }
+  .matrix .ch h2 { font-size: 12.5px; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+
+<main class="sheet">
+  <div class="topbar">
+    <span class="label">Address Intelligence &middot; Solution Brief</span>
+    <span class="who">For the VP of Operations &middot; David Voyer, Solutions Architect &middot; Precisely SE assignment &middot; Nov 2026</span>
+  </div>
+
+  <div class="content">
+  <header class="title">
+    <h1>A <em>&asymp;$27K</em> data investment recovers <em>&asymp;$0.7M a year</em> in operating cost and closes up to <em>$7M a year</em> of unpriced flood risk</h1>
+    <p class="dek">In a 200-policy sample reflecting the carrier&rsquo;s address issues, 38% of addresses contained an error. Sized conservatively at 15%, that is about 45,000 of 300,000 policies the operations team cannot fully trust. Precisely address verification and location data fix most of them automatically and put each property in the right risk zone; a focused AI layer tells the team what to do with the rest.</p>
+  </header>
+
+  <section class="kpis" aria-label="Headline figures">
+    <div class="kpi">
+      <span class="ico"><i data-lucide="trending-up"></i></span>
+      <div><span class="num">&asymp;25&times;<small> year-one return</small></span><span class="lbl">&asymp;$27K to verify and enrich all 300,000 policies, against &asymp;$0.7M a year saved</span></div>
+    </div>
+    <div class="kpi cost">
+      <span class="ico"><i data-lucide="banknote"></i></span>
+      <div><span class="num">$1.1&ndash;1.3M<small> / yr</small></span><span class="lbl">spent chasing flawed addresses and rerouting claims</span></div>
+    </div>
+    <div class="kpi rev">
+      <span class="ico"><i data-lucide="trending-down"></i></span>
+      <div><span class="num">$2&ndash;7M<small> / yr</small></span><span class="lbl">of flood risk not reflected in premium, plus &asymp;9,450 customers over-charged</span></div>
+    </div>
+  </section>
+
+  <section class="matrix" aria-label="Two business risks">
+    <div class="corner"></div>
+    <div class="ch"><span class="chip cost">Risk 1 &middot; Cost</span><h2>Misrouted claims and manual follow-up</h2></div>
+    <div class="ch"><span class="chip rev">Risk 2 &middot; Revenue</span><h2>1 in 3 policies rated on a rough location is mispriced</h2></div>
+
+    <div class="rh"><i data-lucide="circle-dollar-sign"></i>Exposure</div>
+    <div>
+      <div class="big">$1.1&ndash;1.3M<small>a year</small></div>
+      <p class="calc">45,000 flawed addresses <span class="t a">assumed</span> &times; $22&ndash;25 in staff time <span class="t a">assumed</span> and returned mail <span class="t s">sourced</span> + 2,250 claims <span class="t s">sourced</span> &times; $40&ndash;60 to re-route <span class="t s">vendor est.</span></p>
+    </div>
+    <div>
+      <div class="big">$2&ndash;7M<small>of unpriced flood risk a year</small></div>
+      <p class="calc">45,000 policies rated on a rough location <span class="t a">assumed</span> &times; 15% under-priced <span class="t m">measured</span> &times; &asymp;$1,000 high- vs. low-risk price gap <span class="t s">sourced</span>; &asymp;$2.3M if a third are affected; plus &asymp;9,450 over-charged <span class="t m">21% measured</span></p>
+    </div>
+
+    <div class="rh"><i data-lucide="search"></i>Evidence</div>
+    <div>
+      <p class="cellp">One flawed address typically costs 15&ndash;20 minutes of staff time:</p>
+      <div class="mini" aria-label="Manual follow-up for one flawed address">
+        <div class="ms"><i data-lucide="search"></i><b>Investigate</b><span>Check records and maps</span><em>&asymp;5 min</em></div>
+        <div class="ms"><i data-lucide="phone"></i><b>Contact</b><span>Call or email the policyholder</span><em>&asymp;5&ndash;10 min</em></div>
+        <div class="ms"><i data-lucide="file-pen"></i><b>Correct</b><span>Update the record, re-issue</span><em>&asymp;5 min</em></div>
+      </div>
+      <div class="knock"><span><i data-lucide="mail-x"></i>Returned mail &asymp;$3 a piece</span><span><i data-lucide="route"></i>Claims sent to the wrong service area</span></div>
+    </div>
+    <div>
+      <p class="cellp">Rough vs. confirmed location, 39 sample properties; every under-priced case was high-risk:</p>
+      <div class="zbar" aria-hidden="true"><span class="z-ok" style="width:64%"></span><span class="z-under" style="width:15%"></span><span class="z-over" style="width:21%"></span></div>
+      <div class="zleg"><span><i class="z-ok"></i>Right zone 64%</span><span><i class="z-under"></i>Riskier than priced 15%</span><span><i class="z-over"></i>Safer than priced 21%</span></div>
+      <div class="knock"><span><i data-lucide="triangle-alert"></i>The carrier keeps the risks it under-prices and loses the customers it over-prices</span></div>
+    </div>
+
+    <div class="rh"><i data-lucide="shield-check"></i>With Precisely</div>
+    <div class="cellp">Addresses are corrected and confirmed as they enter; in the sample, 6 in 10 flawed addresses were fixed to the right building automatically, and 3 in 4 were resolved without manual research once the AI layer was added.</div>
+    <div class="cellp">Every confirmed policy is rated on the building&rsquo;s location and flood zone; underwriting is alerted when a location cannot be confirmed.</div>
+
+    <div class="rh"><i data-lucide="target"></i>Outcome</div>
+    <div class="result"><i data-lucide="circle-check"></i>&asymp;$0.6&ndash;0.8M a year back in staff time, postage and claims handling</div>
+    <div class="result"><i data-lucide="circle-check"></i>Prices match real risk: flood losses covered, good customers kept</div>
+  </section>
+
+  <section class="ai" aria-label="What the AI layer adds">
+    <div class="ai-head">
+      <span class="ico"><i data-lucide="brain-circuit"></i></span>
+      <div>
+        <span class="label">What the AI layer adds</span>
+        <p>Location data shows where a property is; the AI layer tells the team what to do when an address is wrong, so two in three problem addresses leave the queue with a correct next step.</p>
+      </div>
+    </div>
+    <div class="chev" aria-label="Process">
+      <div class="step"><i data-lucide="map-pin"></i><div><b>Verify</b><span>Precisely confirms the address</span></div></div>
+      <div class="step"><i data-lucide="layers"></i><div><b>Enrich</b><span>Flood zone, water distance, year built where available</span></div></div>
+      <div class="step ai-step"><i data-lucide="brain-circuit"></i><div><b>Diagnose</b><span>AI names the likely cause, with confidence</span></div></div>
+      <div class="step"><i data-lucide="shield-check"></i><div><b>Confirm</b><span>Precisely re-checks every AI fix</span></div></div>
+    </div>
+    <div class="outcome">
+      <div class="bhead"><span class="label">Where the AI sent the 30 addresses that needed follow-up</span><span class="bsub">30 of the 200 policies in a sample representative of the carrier&rsquo;s address issues (typos, missing units, ZIP/city mismatches, outdated entries)</span></div>
+      <div class="obar" aria-label="Outcomes for 30 problem addresses">
+        <div class="o1" style="flex:14"><i data-lucide="send"></i>14 customer requests</div>
+        <div class="o2" style="flex:6"><i data-lucide="circle-check"></i>6 fixes confirmed</div>
+        <div class="o3" style="flex:10"><i data-lucide="user-search"></i>10 analyst review</div>
+      </div>
+      <div class="okeys">
+        <div><b>Ask the customer</b> for the missing house number; cause identified correctly 14 of 14</div>
+        <div><b>Confirmed fix</b>, one-click approval; 6 of 6 correct</div>
+        <div><b>Analyst</b> works from a short list of likely causes</div>
+      </div>
+      <div class="zero"><i data-lucide="shield-check"></i><span><b>Every AI fix is verified by Precisely before it is applied:</b> no incorrect change reached a policy record.</span></div>
+    </div>
+  </section>
+
+  <section class="bottom">
+    <div class="also">
+      <span class="label" style="color:var(--accent)">Also addressed</span>
+      <div class="row"><i data-lucide="landmark"></i><span><b>Compliance:</b> a verified location for every confirmed policy, with a permanent location ID wherever Precisely holds the address point.</span></div>
+      <div class="row"><i data-lucide="cpu"></i><span><b>Automation-ready:</b> consistent location data that underwriting rules and models can rely on.</span></div>
+    </div>
+    <div class="next">
+      <span class="ico"><i data-lucide="flag"></i></span>
+      <div>
+        <span class="label">Decision requested</span>
+        <p><b>Approve a 90-day pilot on one region&rsquo;s live policies</b>, measured on staff hours, returned mail and re-rated policies against the estimates on this page.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="src">
+    <b>Basis.</b> Estimates for a 300,000-policy book. <b>Measured</b> on a 200-policy sample modeled on the carrier&rsquo;s address issues (38% with an error): 6 in 10 flawed addresses fixed automatically; 30 not confirmable by verification alone, of which the AI layer resolved 6 with a confirmed fix (Precisely rejected 3 AI suggestions that did not verify) and routed 14 to the customer; risk tiers on 39 properties vs. city-level location (upper bound). <b>Sourced:</b> returned mail &asymp;$3/piece (USPS OIG); &asymp;5% of homes claim each year (Insurance Research Council); high- vs. low-risk flood price gap &asymp;$1,000/yr (indicative); $40&ndash;60 per manual claim (vendor estimates). <b>Assumed:</b> 15% of addresses flawed and as many rated on a rough location; 15&ndash;20 min per flawed address at $40/hr loaded; 4 mailings a year; every claim on a flawed address re-routed (worst case). <b>Savings:</b> research avoided on 75% of flawed addresses; mail and re-routing avoided on the 49% fully fixed. <b>Data cost:</b> &asymp;9 credits/policy (verification 1, ID 0.01, flood 5, water 2, year built 1) at $0.01 list; excludes enterprise pricing, risk-use fees, integration.
+  </footer>
+  </div>
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+  try { lucide.createIcons(); } catch (e) { /* icons are decorative; page reads without them */ }
+</script>
+</body></html>
