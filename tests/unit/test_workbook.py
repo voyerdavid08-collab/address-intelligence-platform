@@ -228,3 +228,36 @@ def _read_fixture_csv(path):
     with path.open(newline="", encoding="utf-8") as source:
         reader = csv.DictReader(source)
         return reader.fieldnames, list(reader)
+
+
+def test_private_workbook_without_ground_truth_omits_accuracy_columns(tmp_path):
+    from address_intelligence.workbook import _about_rows, _private_rows
+
+    validated, _ = _private_rows(
+        [{"policy_id": "P1"}], [{"policy_id": "P1", "standardized_address_line1": "1 A ST"}], None
+    )
+    assert "correct_building" not in validated[0] and "fully_correct" not in validated[0]
+    about = dict(_about_rows(True, has_truth=False))
+    assert about["Accuracy"] == "Accuracy against a reference is not included: no labelled reference data for this client."
+    assert "Accuracy" not in dict(_about_rows(True, has_truth=True))
+
+
+def test_private_license_lines_default_profile_matches_original_and_neutral_fallback():
+    import copy
+    from address_intelligence.client_profile import ClientProfile, DEFAULT_PROFILE_PATH, load_client_profile
+    from address_intelligence.workbook import PRIVATE_LICENSE, private_license_lines
+
+    default = load_client_profile(DEFAULT_PROFILE_PATH)
+    assert private_license_lines(default) == PRIVATE_LICENSE
+
+    data = copy.deepcopy(default.data)
+    del data["data_handling"]["private_workbook_note"]
+    data["data_handling"]["retention_days"] = 45
+    neutral = private_license_lines(
+        ClientProfile(path=default.path, project_root=default.project_root, data=data)
+    )
+    assert neutral == (
+        "Confidential: contains Precisely API Content.",
+        "Share only with authorised parties under the Precisely APIs Acceptable Use Policy, sections 4.1\u20134.2.",
+        "Delete local copies within 45 days of retrieval.",
+    )

@@ -814,37 +814,67 @@ def compute_before_after_metrics(
             continue
         if distance >= 0:
             distances.append(distance)
-    rows.extend(
-        [
-            _metric("Coarse vs verified location (Risk 2)", "Records compared", len(compared), total, "precisely_api"),
-            _metric("Coarse vs verified location (Risk 2)", "Flood-zone base changed", base_changed, len(compared), "precisely_api"),
-            _metric("Coarse vs verified location (Risk 2)", "Flood-risk tier changed", tier_changed, len(compared), "precisely_api"),
-            _metric("Coarse vs verified location (Risk 2)", "Coarse location understated verified risk", understates, len(compared), "precisely_api"),
-            _metric("Coarse vs verified location (Risk 2)", "Coarse location overstated verified risk", overstates, len(compared), "precisely_api"),
+    if not compared:
+        rows.append(
             _metric(
                 "Coarse vs verified location (Risk 2)",
-                "Median comparison distance km",
-                f"{statistics.median(distances):.3f}" if distances else "n/a",
-                len(distances),
+                "Comparison not run for this client.",
+                "0",
+                "0",
                 "precisely_api",
-                after=f"{statistics.median(distances):.3f}" if distances else "n/a",
-            ),
-        ]
-    )
-    _append_report_rows(
-        rows,
-        "AI narratives",
-        narrative_report_path,
-        input_denominator=total,
-    )
-    _append_report_rows(
-        rows,
-        "Remediation",
-        calibration_report_path,
-        input_denominator=total,
-        actions_report_path=actions_report_path,
-        remediation_headlines=True,
-    )
+                before="n/a",
+                after="n/a",
+            )
+        )
+    else:
+        rows.extend(
+            [
+                _metric("Coarse vs verified location (Risk 2)", "Records compared", len(compared), total, "precisely_api"),
+                _metric("Coarse vs verified location (Risk 2)", "Flood-zone base changed", base_changed, len(compared), "precisely_api"),
+                _metric("Coarse vs verified location (Risk 2)", "Flood-risk tier changed", tier_changed, len(compared), "precisely_api"),
+                _metric("Coarse vs verified location (Risk 2)", "Coarse location understated verified risk", understates, len(compared), "precisely_api"),
+                _metric("Coarse vs verified location (Risk 2)", "Coarse location overstated verified risk", overstates, len(compared), "precisely_api"),
+                _metric(
+                    "Coarse vs verified location (Risk 2)",
+                    "Median comparison distance km",
+                    f"{statistics.median(distances):.3f}" if distances else "n/a",
+                    len(distances),
+                    "precisely_api",
+                    after=f"{statistics.median(distances):.3f}" if distances else "n/a",
+                ),
+            ]
+        )
+    for section, report_path, extra in (
+        ("AI narratives", narrative_report_path, {}),
+        (
+            "Remediation",
+            calibration_report_path,
+            {
+                "actions_report_path": actions_report_path,
+                "remediation_headlines": True,
+            },
+        ),
+    ):
+        if not Path(report_path).is_file():
+            rows.append(
+                _metric(
+                    section,
+                    "Not run for this client.",
+                    "0",
+                    "0",
+                    "ai_report",
+                    before="n/a",
+                    after="n/a",
+                )
+            )
+            continue
+        _append_report_rows(
+            rows,
+            section,
+            report_path,
+            input_denominator=total,
+            **extra,
+        )
 
     active_ledger = ledger or CreditLedger(Decimal("2150"))
     credits_used = active_ledger.cumulative_spent

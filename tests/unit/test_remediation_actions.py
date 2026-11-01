@@ -692,3 +692,36 @@ def test_dry_runs_are_network_free_and_report_plan(tmp_path):
     report = (tmp_path / "reports" / "actions.md").read_text(encoding="utf-8")
     assert "dry-run planning only" in report
     assert "12 EXAMPLE ST" not in report
+
+
+def test_new_client_without_ground_truth_clis_make_no_calls(tmp_path, monkeypatch, capsys):
+    import yaml
+    from address_intelligence import remediation, remediation_actions
+    from address_intelligence.client_profile import DEFAULT_PROFILE_PATH
+
+    data = yaml.safe_load(DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    data["evaluation"] = {"ground_truth_path": None}
+    data["ai"] = {
+        "narratives": {"enabled": False},
+        "remediation": {"enabled": True, "samples": 5, "conformal_alpha": 0.1},
+    }
+    profile_path = tmp_path / "client_profile.yaml"
+    profile_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("no client or model call may be made")
+
+    monkeypatch.setattr(remediation_actions, "PreciselyClient", boom)
+    monkeypatch.setattr(remediation.RemediationDiagnoser, "__init__", boom)
+    monkeypatch.setattr(remediation_actions.ExceptionActionWorkflow, "__init__", boom)
+    monkeypatch.setattr(remediation.requests, "post", boom)
+
+    assert remediation.run_diagnosis_cli(["--profile", str(profile_path)]) == 0
+    assert remediation.NO_CALIBRATION_MESSAGE in capsys.readouterr().out
+    assert (
+        remediation_actions.run_remediation_cli(
+            ["--stage", "suggest", "--profile", str(profile_path)]
+        )
+        == 0
+    )
+    assert remediation.NO_CALIBRATION_MESSAGE in capsys.readouterr().out

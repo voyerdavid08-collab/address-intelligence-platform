@@ -329,6 +329,11 @@ def suggest_mapping(columns: Iterable[str]) -> dict[str, str | None]:
     column_list = list(columns)
     normalized = {_normalize_header(column): column for column in column_list}
     available = set(column_list)
+    parts: dict[str, str] = {}
+    for column in column_list:
+        if "/" in column:
+            for part in column.split("/"):
+                parts.setdefault(_normalize_header(part), column)
     mapping: dict[str, str | None] = {}
     for canonical in CANONICAL_COLUMNS:
         candidates = [canonical.replace("_", " "), *_ALIASES[canonical]]
@@ -341,6 +346,15 @@ def suggest_mapping(columns: Iterable[str]) -> dict[str, str | None]:
             ),
             None,
         )
+        if selected is None:
+            selected = next(
+                (
+                    parts[_normalize_header(candidate)]
+                    for candidate in candidates
+                    if parts.get(_normalize_header(candidate)) in available
+                ),
+                None,
+            )
         if selected is None:
             scored: list[tuple[float, str]] = []
             for candidate in candidates:

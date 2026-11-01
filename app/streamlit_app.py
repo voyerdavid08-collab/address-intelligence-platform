@@ -29,6 +29,7 @@ from address_intelligence.app_data import (
     load_summary_kpis,
     made_up_exception_workbook,
     open_folder,
+    plain_flag_reason,
     REAL_SAVE_EXPLANATION as app_data_real_save_explanation,
     read_summary_csv,
     save_real_exception_workbook,
@@ -287,34 +288,42 @@ def _verification_text(row: dict[str, Any]) -> str:
     return friendly_label(str(row.get("verification_status", "not_started")))
 
 
-def _stage_commands(profile_path: str, ai_flags: dict[str, bool]) -> list[str]:
-    pipeline = [
-        f".venv\\Scripts\\python scripts/run_pipeline.py --stage {stage} --profile {profile_path}"
-        for stage in ("geocode", "preciselyid", "enrich", "compare")
-    ]
-    commands = [
-        f"# Dry runs (no cost)\n{command}"
-        for command in pipeline
-    ]
-    commands.extend(
-        f"{command} --execute"
-        for command in pipeline
-    )
-    commands.extend(
-        [
-            f".venv\\Scripts\\python scripts/metrics_report.py --profile {profile_path}",
-            f".venv\\Scripts\\python scripts/build_workbook.py --profile {profile_path}",
-        ]
-    )
+def _stage_commands(
+    profile_path: str,
+    ai_flags: dict[str, bool],
+    comparison: bool = False,
+) -> list[str]:
+    py = ".venv\\Scripts\\python"
+    stages = ["geocode", "preciselyid", "enrich"] + (["compare"] if comparison else [])
+    steps: list[list[str]] = []
+    for stage in stages:
+        base = f"{py} scripts/run_pipeline.py --stage {stage} --profile {profile_path}"
+        steps.append(["# Dry run (no cost)", base])
+        steps.append(["# Paid run, only after approval", f"{base} --execute"])
     if ai_flags.get("narratives"):
-        commands.append(
-            f".venv\\Scripts\\python scripts/generate_narratives.py --profile {profile_path}"
-        )
+        base = f"{py} scripts/generate_narratives.py --profile {profile_path}"
+        steps.append(["# Dry run (no cost)", f"{base} --dry-run"])
+        steps.append(["# Paid run, only after approval", f"{base} --execute"])
+        steps.append([f"{py} scripts/evaluate_narratives.py --profile {profile_path}"])
     if ai_flags.get("remediation"):
-        commands.append(
-            f".venv\\Scripts\\python scripts/remediate_exceptions.py --profile {profile_path}"
+        steps.append(
+            [
+                "# Prints 'not available' until a labelled calibration sample exists.",
+                f"{py} scripts/diagnose_exceptions.py --profile {profile_path}",
+            ]
         )
-    return commands
+        steps.append(
+            [
+                "# Prints 'not available' until a labelled calibration sample exists.",
+                f"{py} scripts/remediate_exceptions.py --stage suggest --profile {profile_path}",
+            ]
+        )
+    steps.append([f"{py} scripts/metrics_report.py --profile {profile_path}"])
+    steps.append([f"{py} scripts/build_workbook.py --profile {profile_path}"])
+    return [
+        f"# Step {number}\n" + "\n".join(lines)
+        for number, lines in enumerate(steps, start=1)
+    ]
 
 
 st.set_page_config(
@@ -389,7 +398,7 @@ with start_tab:
         for icon, text in (
             (":material/verified_user:", "Only address columns are used; every other column stays on this computer."),
             (":material/phonelink_lock:", "This app never contacts Precisely or the AI. Paid runs start only from the command line, after approval."),
-            (":material/share:", "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy §4.1–4.2)."),
+            (":material/share:", "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy, sections 4.1–4.2)."),
             (":material/lock:", "Client files and settings are saved in a private project folder that is never uploaded to GitHub."),
         ):
             st.markdown(f"{icon} {text}")
@@ -504,17 +513,40 @@ with onboard_tab:
         fingerprint = _file_fingerprint()
         st.subheader("Client", anchor=False)
         with st.container(border=True):
+            name_key = f"client_name_{fingerprint}"
+            folder_key = f"folder_name_{fingerprint}"
+            edited_key = f"folder_edited_{fingerprint}"
+            if name_key not in st.session_state:
+                st.session_state[name_key] = (
+                    "Sample fictional carrier" if st.session_state.sample_mode else ""
+                )
+            if folder_key not in st.session_state:
+                st.session_state[folder_key] = (
+                    _slugify(st.session_state[name_key])
+                    if st.session_state[name_key].strip()
+                    else ""
+                )
+                st.session_state[edited_key] = False
+
+            def _suggest_folder(name_key=name_key, folder_key=folder_key, edited_key=edited_key):
+                if not st.session_state.get(edited_key):
+                    typed = st.session_state[name_key]
+                    st.session_state[folder_key] = _slugify(typed) if typed.strip() else ""
+
+            def _mark_folder_edited(edited_key=edited_key):
+                st.session_state[edited_key] = True
+
             client_name = st.text_input(
                 "Client name",
-                value="Sample fictional carrier",
-                key=f"client_name_{fingerprint}",
+                key=name_key,
+                placeholder="e.g. Acme Insurance",
+                on_change=_suggest_folder,
                 help="The client's name as it should appear in the settings and reports.",
             )
-            default_slug = _slugify(client_name)
             slug = st.text_input(
                 "Folder name",
-                value=default_slug,
-                key=f"folder_name_{fingerprint}_{default_slug}",
+                key=folder_key,
+                on_change=_mark_folder_edited,
                 help="Short ID for this client: lowercase letters, numbers and hyphens, e.g. acme-insurance.",
             )
         st.subheader("Match the file columns", anchor=False)
@@ -586,7 +618,10 @@ with onboard_tab:
         )
         missing_message = missing_required_message(chosen)
         profile_data = None
-        if missing_message:
+        if not client_name.strip():
+            st.session_state.pop("onboarding_profile", None)
+            st.warning("Enter the client name.")
+        elif missing_message:
             st.session_state.pop("onboarding_profile", None)
             st.warning(missing_message)
         else:
@@ -808,7 +843,7 @@ with cost_tab:
         profile_path = f"data/clients/{slug}/client_profile.yaml"
         ai_flags = st.session_state.get("client_ai_flags", {})
         with st.expander("Commands for the technical team"):
-            st.code("\n".join(_stage_commands(profile_path, ai_flags)), language="powershell")
+            st.code("\n\n".join(_stage_commands(profile_path, ai_flags, bool(profile_data.get("comparison", {}).get("enabled")))), language="powershell")
             st.caption("Copy a command, review the dry-run plan, and get approval before any paid run.")
 
 with results_tab:
@@ -855,8 +890,10 @@ with results_tab:
     else:
         queue, _is_demo = load_exception_queue(profile.run_dir)
         st.warning(
-            "Real Precisely results on this computer. Fine for local review; do not share screenshots or exports of individual records outside Precisely (Acceptable Use Policy §4.1–4.2)."
+            "Real Precisely results on this computer. Fine for local review; do not share screenshots or exports of individual records outside Precisely (Acceptable Use Policy, sections 4.1–4.2)."
         )
+        if queue and all(row.get("suggestion_status") == "Not available" for row in queue):
+            st.info("AI suggestions are off for this client until a labelled calibration sample is available.")
     if not queue:
         st.info(":material/task_alt: No work items are available for this client.")
     else:
@@ -889,7 +926,14 @@ with results_tab:
             hide_index=True,
             height=36 * (len(table_rows) + 1) + 4,
             column_config={
-                "Confidence": st.column_config.TextColumn("Confidence", width="small"),
+                "Confidence": (
+                    None
+                    if all(
+                        str(row.get("confidence", "")).strip() in ("", "Not available")
+                        for row in filtered
+                    )
+                    else st.column_config.TextColumn("Confidence", width="small")
+                ),
                 "Policy ID": st.column_config.TextColumn("Policy ID", width="medium"),
             },
             key="exceptions_table",
@@ -951,7 +995,7 @@ with results_tab:
         left.markdown("**Suggested address**")
         left.write(_format_address(detail.get("suggestion")))
         right.markdown("**Why it was flagged**")
-        right.write(detail.get("rationale", ""))
+        right.write(detail.get("rationale") or plain_flag_reason(detail.get("manual_review_reason", "")))
         with st.container(border=True):
             st.markdown("**Precisely verification**")
             st.write(_verification_text(detail))

@@ -70,6 +70,7 @@ VALIDATED_COLUMNS = (
     "correct_building",
     "fully_correct",
 )
+ACCURACY_COLUMNS = ("correct_building", "fully_correct")
 ENRICHED_COLUMNS = (
     "policy_id",
     "flood_zone_code",
@@ -103,8 +104,28 @@ def _read_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
         return list(reader.fieldnames), list(reader)
 
 
-def _about_rows(private: bool) -> list[tuple[str, str]]:
-    license_lines = PRIVATE_LICENSE if private else PUBLIC_LICENSE
+def private_license_lines(profile: ClientProfile | None) -> tuple[str, ...]:
+    """Profile-supplied private licensing lines, or the neutral default."""
+    profile = profile or _DEFAULT_PROFILE
+    handling = profile.data.get("data_handling", {})
+    note = handling.get("private_workbook_note")
+    if note:
+        return tuple(note)
+    days = handling.get("retention_days", 30)
+    return (
+        "Confidential: contains Precisely API Content.",
+        "Share only with authorised parties under the Precisely APIs Acceptable Use "
+        "Policy, sections 4.1\u20134.2.",
+        f"Delete local copies within {days} days of retrieval.",
+    )
+
+
+def _about_rows(
+    private: bool,
+    has_truth: bool = True,
+    private_lines: tuple[str, ...] | None = None,
+) -> list[tuple[str, str]]:
+    license_lines = (private_lines or PRIVATE_LICENSE) if private else PUBLIC_LICENSE
     rows = [
         ("Title", "Address Intelligence: before/after data file"),
         *TAB_DESCRIPTIONS,
@@ -112,6 +133,14 @@ def _about_rows(private: bool) -> list[tuple[str, str]]:
         ("Definition", "Correct building = street line + ZIP match the reference, unit ignored"),
         ("Data licensing", ""),
     ]
+    if not has_truth:
+        rows.insert(
+            -1,
+            (
+                "Accuracy",
+                "Accuracy against a reference is not included: no labelled reference data for this client.",
+            ),
+        )
     rows.extend((f"Data licensing {index}", text) for index, text in enumerate(license_lines, start=1))
     return rows
 
@@ -175,8 +204,10 @@ def _validate_public_examples(
 def _private_rows(
     raw_rows: list[dict[str, str]],
     results: list[dict[str, str]],
-    truths: list[dict[str, str]],
+    truths: list[dict[str, str]] | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    has_truth = truths is not None
+    truths = truths or []
     result_by_id = {row["policy_id"]: row for row in results}
     truth_by_id = {row["policy_id"]: row for row in truths}
     validated: list[dict[str, Any]] = []
@@ -205,6 +236,7 @@ def _private_rows(
                 else result.get(column, "")
                 for column in VALIDATED_COLUMNS
                 if column != "policy_id"
+                and (has_truth or column not in ACCURACY_COLUMNS)
             }
             | {"policy_id": policy_id}
         )
@@ -268,6 +300,8 @@ def _write_workbook(
     summary_rows: list[dict[str, str]],
     validated_rows: list[dict[str, Any]],
     enriched_rows: list[dict[str, Any]],
+    has_truth: bool = True,
+    private_lines: tuple[str, ...] | None = None,
 ) -> dict[str, int]:
     if not private:
         _validate_public_examples(validated_rows, enriched_rows)
@@ -279,7 +313,7 @@ def _write_workbook(
         ("Item", "Details"),
         [
             {"Item": item, "Details": details}
-            for item, details in _about_rows(private)
+            for item, details in _about_rows(private, has_truth, private_lines)
         ],
     )
     raw = workbook.create_sheet("Raw")
@@ -287,7 +321,9 @@ def _write_workbook(
     validated = workbook.create_sheet("Validated")
     _append_table(
         validated,
-        VALIDATED_COLUMNS,
+        VALIDATED_COLUMNS
+        if has_truth
+        else tuple(c for c in VALIDATED_COLUMNS if c not in ACCURACY_COLUMNS),
         validated_rows,
         banner=None if private else PUBLIC_BANNER,
     )
@@ -305,13 +341,13 @@ def _write_workbook(
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(path)
     counts = {
-        "About": len(_about_rows(private)),
+        "About": len(_about_rows(private, has_truth, private_lines)),
         "Raw": len(raw_rows),
         "Validated": len(validated_rows),
         "Enriched": len(enriched_rows),
         "Summary stats": len(summary_rows),
     }
-    if private:
+    if private and has_truth:
         counts["correct_building_Y"] = sum(
             row.get("correct_building") == "Y" for row in validated_rows
         )
@@ -375,10 +411,9 @@ def build_workbooks(
             f"PRIVATE workbook skipped: local results file is missing ({results_path})."
         )
         return result
-    if ground_truth_path is None:
-        print("PRIVATE workbook skipped: no ground-truth reference is configured.")
-        return result
-    _, truth_rows = _read_csv(ground_truth_path)
+    truth_rows = (
+        _read_csv(ground_truth_path)[1] if ground_truth_path is not None else None
+    )
     _, result_rows = _read_csv(results_path)
     private_validated, private_enriched = _private_rows(
         private_raw_rows, result_rows, truth_rows
@@ -392,6 +427,8 @@ def build_workbooks(
         summary_rows=summary_rows,
         validated_rows=private_validated,
         enriched_rows=private_enriched,
+        has_truth=truth_rows is not None,
+        private_lines=private_license_lines(profile),
     )
     return result
 
@@ -415,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Tabs: {', '.join(SHEET_NAMES)}")
         for tab in SHEET_NAMES:
             print(f"  {tab}: {tab_counts[tab]} data rows")
-        if version == "PRIVATE":
+        if version == "PRIVATE" and "correct_building_Y" in tab_counts:
             print(f"  correct_building Y: {tab_counts['correct_building_Y']}")
             print(f"  fully_correct Y: {tab_counts['fully_correct_Y']}")
     return 0

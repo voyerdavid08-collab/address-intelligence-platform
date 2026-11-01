@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -210,7 +211,8 @@ def test_empty_or_error_results_are_not_charged(tmp_path):
 
     assert response.error == "Precisely returned no results."
     assert response.credits_recorded == Decimal("0")
-    ledger.record_failure.assert_called_once_with("geocode_premium")
+    ledger.record_no_result.assert_called_once_with("geocode_premium")
+    ledger.record_failure.assert_not_called()
     ledger.record_success.assert_not_called()
 
 
@@ -366,3 +368,50 @@ def test_configured_request_interval_throttles_oauth_and_api(tmp_path, monkeypat
     client.geocode("sample address", "premium")
 
     assert delays == [pytest.approx(0.1)]
+
+
+REAL_LEDGER = Path(__file__).resolve().parents[2] / "data" / "state" / "credit_ledger.json"
+
+
+def _real_mtime():
+    return REAL_LEDGER.stat().st_mtime_ns if REAL_LEDGER.exists() else None
+
+
+def _run_geocode(tmp_path, status, payload):
+    session = Mock()
+    session.post.return_value = _response(
+        200, {"access_token": "private-token", "expiresIn": "35999"}
+    )
+    session.request.return_value = _response(status, payload)
+    ledger = CreditLedger(Decimal("100"), tmp_path / "ledger.json")
+    response = _client(tmp_path, session=session, ledger=ledger).geocode(
+        "sample address", "premium"
+    )
+    return response, ledger
+
+
+def test_http_200_without_result_logs_not_billed(tmp_path, caplog):
+    before = _real_mtime()
+    with caplog.at_level("INFO"):
+        response, ledger = _run_geocode(tmp_path, 200, {"candidates": []})
+
+    assert response.credits_recorded == Decimal("0")
+    assert "No result returned for geocode_premium (not billed)" in caplog.text
+    assert "zero credits recorded" not in caplog.text
+    entries = ledger._read_state()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["outcome"] == "no_result"
+    assert Decimal(str(entries[0]["credits"])) == Decimal("0")
+    assert _real_mtime() == before
+
+
+def test_http_500_still_logs_failure_wording(tmp_path, caplog):
+    before = _real_mtime()
+    with caplog.at_level("INFO"):
+        response, ledger = _run_geocode(tmp_path, 500, {"message": "boom"})
+
+    assert response.credits_recorded == Decimal("0")
+    assert "Provider operation failed; zero credits recorded: geocode_premium" in caplog.text
+    assert "not billed" not in caplog.text
+    assert ledger._read_state()["entries"][0]["outcome"] == "failure"
+    assert _real_mtime() == before

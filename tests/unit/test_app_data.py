@@ -403,3 +403,22 @@ def test_real_mode_with_missing_files_does_not_show_made_up_rows(tmp_path):
     )
     assert queue == []
     assert is_demo is False
+
+
+def test_queue_from_results_only_has_not_available_and_no_demo(tmp_path):
+    from address_intelligence.app_data import format_exception_table_rows, load_exception_queue
+
+    (tmp_path / "results_rowlevel.csv").write_text(
+        "policy_id,eligibility,manual_review_reason,precision_code\n"
+        "P1,manual_review,street-level only,S4\n"
+        "P2,eligible,,S8\n",
+        encoding="utf-8",
+    )
+    queue, is_demo = load_exception_queue(tmp_path)
+    assert is_demo is False
+    assert [row["policy_id"] for row in queue] == ["P1"]
+    row = format_exception_table_rows(queue)[0]
+    assert row["Next action"] == "Analyst review"
+    for header in ("AI cause", "Confidence", "Suggestion status", "Verification status"):
+        assert row[header] == "Not available"
+    assert row["Manual review reason"] == "Matched to the street, not the building"

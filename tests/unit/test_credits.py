@@ -96,3 +96,18 @@ def test_external_spend_rejects_non_positive_or_non_finite_values(
 
     with pytest.raises(ValueError, match="positive finite"):
         ledger.record_external(credits, "portal test call")
+
+
+def test_no_result_and_failure_log_wording(tmp_path, caplog):
+    import logging
+    from address_intelligence.credits import CreditLedger, PRICE_TABLE
+    from decimal import Decimal
+
+    operation = next(iter(PRICE_TABLE))
+    ledger = CreditLedger(Decimal("100"), tmp_path / "ledger.json")
+    with caplog.at_level(logging.INFO):
+        ledger.record_no_result(operation)
+        ledger.record_failure(operation)
+    messages = [r.getMessage() for r in caplog.records]
+    assert f"No result returned for {operation} (not billed)" in messages
+    assert any(m.startswith("Provider operation failed; zero credits recorded") for m in messages)

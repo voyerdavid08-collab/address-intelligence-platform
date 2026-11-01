@@ -267,6 +267,15 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
             or retention_days < 1
         ):
             raise _config_error("data_handling.retention_days must be at least 1.")
+        note = data["data_handling"].get("private_workbook_note")
+        if note is not None and (
+            not isinstance(note, list)
+            or not note
+            or any(not isinstance(line, str) or not line.strip() for line in note)
+        ):
+            raise _config_error(
+                "data_handling.private_workbook_note must be a list of non-empty strings."
+            )
     except KeyError as exc:
         raise _config_error(f"Missing client profile field: {exc.args[0]}.") from None
     except (TypeError, ValueError) as exc:

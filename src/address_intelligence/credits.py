@@ -85,6 +85,14 @@ class CreditLedger:
         self._write_state(state)
         return cost
 
+    def record_no_result(self, operation: str) -> None:
+        """Log an HTTP 200 call that returned no result; it is not billed."""
+        self._price(operation)
+        LOGGER.info("No result returned for %s (not billed)", operation)
+        state = self._read_state()
+        state["entries"].append(self._entry(operation, 0, Decimal("0"), "no_result"))
+        self._write_state(state)
+
     def record_failure(self, operation: str) -> None:
         """Log a failed call and persist zero credits, per trial charging rules."""
         self._price(operation)

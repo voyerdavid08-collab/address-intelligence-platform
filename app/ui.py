@@ -409,6 +409,6 @@ def theme_chart(chart: alt.TopLevelMixin) -> alt.TopLevelMixin:
 def render_footer() -> None:
     st.markdown(
         '<div class="ai-footer">Local prototype · do not deploy · data handling: '
-        "Precisely APIs Acceptable Use Policy §4.1–4.2</div>",
+        "Precisely APIs Acceptable Use Policy, sections 4.1–4.2</div>",
         unsafe_allow_html=True,
     )

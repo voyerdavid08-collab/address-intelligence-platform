@@ -438,6 +438,8 @@ class RemediationDiagnoser:
         )
 
     def records(self) -> tuple[list[dict[str, Any]], int]:
+        if self.ground_truth_path is None:
+            raise ValueError(NO_CALIBRATION_MESSAGE)
         policy_rows = (
             read_client_policies(self.profile)
             if self.profile is not None
@@ -952,6 +954,13 @@ class DailyBudgetReached(Exception):
     """Internal stop signal when the shared daily Groq token budget is reached."""
 
 
+NO_CALIBRATION_MESSAGE = (
+    "AI suggestions are not available for this client yet: they need a labelled "
+    "calibration sample (about 30–70 of the client's own exceptions). "
+    "Exceptions stay in the analyst work list."
+)
+
+
 def run_diagnosis_cli(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -972,6 +981,9 @@ def run_diagnosis_cli(argv: list[str] | None = None) -> int:
             f"Remediation is disabled by client profile '{profile.data['client']['name']}'; "
             "no remediation work was run."
         )
+        return 0
+    if profile.ground_truth_path is None:
+        print(NO_CALIBRATION_MESSAGE)
         return 0
     from address_intelligence.config import Settings
 

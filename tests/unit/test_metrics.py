@@ -403,3 +403,24 @@ def test_privacy_guard_rejects_unexpected_csv_header():
     }
     with pytest.raises(ValueError, match="unexpected CSV header"):
         _validate_privacy([row])
+
+
+def test_missing_ai_reports_write_not_run_lines(tmp_path):
+    paths = _fixture(tmp_path, no_eligible=False)
+    paths["narrative_report_path"] = tmp_path / "missing_narrative.csv"
+    paths["calibration_report_path"] = tmp_path / "missing_calibration.csv"
+    rows = compute_before_after_metrics(**paths)
+    assert _find(rows, "AI narratives", "Not run for this client.")
+    assert _find(rows, "Remediation", "Not run for this client.")
+
+
+def test_comparison_section_replaced_when_nothing_compared(tmp_path):
+    paths = _fixture(tmp_path)
+    with paths["results_path"].open(newline="", encoding="utf-8") as source:
+        rows = list(csv.DictReader(source))
+    for row in rows:
+        row["compare_status"] = "not_run"
+    _write(paths["results_path"], list(rows[0]), rows)
+    result = compute_before_after_metrics(**paths)
+    section = [r for r in result if r["section"].startswith("Coarse vs verified")]
+    assert [r["metric"] for r in section] == ["Comparison not run for this client."]

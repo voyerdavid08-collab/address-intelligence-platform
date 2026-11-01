@@ -239,7 +239,7 @@ class PreciselyClient:
                 response.headers.get("Retry-After"),
             )
         if not self._has_results(data):
-            self.ledger.record_failure(operation)
+            self.ledger.record_no_result(operation)
             return ProviderResponse(
                 response.status_code, data, "Precisely returned no results.", Decimal("0")
             )

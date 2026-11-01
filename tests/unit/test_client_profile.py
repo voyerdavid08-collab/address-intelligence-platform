@@ -430,3 +430,15 @@ def test_profile_argument_parses_without_running_script(script):
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("bad", ["text", [], [""], ["ok", 3], [" "]])
+def test_private_workbook_note_must_be_list_of_non_empty_strings(tmp_path, bad):
+    from address_intelligence.client_profile import DEFAULT_PROFILE_PATH
+
+    data = yaml.safe_load(DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    data["data_handling"]["private_workbook_note"] = bad
+    path = tmp_path / "client_profile.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match="private_workbook_note"):
+        load_client_profile(path, project_root=tmp_path)

@@ -683,7 +683,7 @@ def test_start_here_and_no_inner_steppers():
     for safety_line in (
         "Only address columns are used; every other column stays on this computer.",
         "This app never contacts Precisely or the AI. Paid runs start only from the command line, after approval.",
-        "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy §4.1–4.2).",
+        "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy, sections 4.1–4.2).",
         "Client files and settings are saved in a private project folder that is never uploaded to GitHub.",
     ):
         assert safety_line in start_tab
@@ -875,3 +875,86 @@ def test_demo_banner_is_rendered_after_measured_kpis():
     assert results_tab.index('st.subheader("Exceptions", anchor=False)') < results_tab.index(
         'if demo_mode:'
     ) < results_tab.index('st.info("Made-up example data, not Precisely output.")')
+
+
+def test_slash_headers_match_each_part():
+    mapping = suggest_mapping(["Policy #", "Street", "Suite/Unit", "City", "State/Province", "Zip"])
+    assert mapping["address_line2"] == "Suite/Unit"
+    assert mapping["state"] == "State/Province"
+
+
+def test_stage_commands_full_order():
+    source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
+    start = source.index("def _stage_commands(")
+    namespace = {}
+    exec(source[start:source.index("st.set_page_config(")], namespace)
+    full = namespace["_stage_commands"]("p.yaml", {"narratives": True, "remediation": True}, True)
+    text = "\n".join(full)
+    order = ["--stage geocode", "--stage preciselyid", "--stage enrich", "--stage compare",
+             "generate_narratives.py", "evaluate_narratives", "diagnose_exceptions", "remediate_exceptions",
+             "metrics_report", "build_workbook"]
+    positions = [text.index(item) for item in order]
+    assert positions == sorted(positions)
+    assert text.count("--execute") == 5
+    assert "--dry-run" in text and "# Step 1" in text
+    assert "Prints 'not available' until a labelled calibration sample exists." in text
+    minimal = "\n".join(namespace["_stage_commands"]("p.yaml", {}, False))
+    assert "compare" not in minimal and "narratives" not in minimal and "diagnose" not in minimal
+
+
+def test_folder_name_and_client_name_behaviour():
+    pytest.importorskip("streamlit")
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(ROOT / "app" / "streamlit_app.py")).run(timeout=30)
+    app.session_state["uploaded_content"] = b"Policy,Street,City,State,ZIP\nP1,1 A ST,X,TX,78701\n"
+    app.session_state["uploaded_name"] = "up.csv"
+    app.run(timeout=30)
+    name = next(w for w in app.text_input if w.label == "Client name")
+    assert name.value == ""
+    assert name.placeholder == "e.g. Acme Insurance"
+    assert any("Enter the client name." in w.value for w in app.warning)
+    assert not [b for b in app.button if b.label == "Save client bundle for a pipeline run"]
+    name.set_value("Acme Insurance").run(timeout=30)
+    folder = next(w for w in app.text_input if w.label == "Folder name")
+    assert folder.value == "acme-insurance"
+    folder.set_value("my-folder").run(timeout=30)
+    next(w for w in app.text_input if w.label == "Client name").set_value("Other Co").run(timeout=30)
+    assert next(w for w in app.text_input if w.label == "Folder name").value == "my-folder"
+
+
+def test_section_wording_and_icons_in_app():
+    for path in ("app/streamlit_app.py", "app/ui.py"):
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert "\u00a7" not in text
+        assert "Acceptable Use Policy, sections 4.1–4.2" in text
+
+
+def test_results_only_client_queue_and_reports(tmp_path):
+    from address_intelligence.app_data import format_exception_table_rows, load_exception_queue, plain_flag_reason
+
+    (tmp_path / "results_rowlevel.csv").write_text(
+        "policy_id,eligibility,manual_review_reason,precision_code\n"
+        "P1,manual_review,street-level only,S4HPNTSCZA\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "narratives.jsonl").write_text(
+        json.dumps({"policy_id": "P1", "narrative": "Needs a house number."}) + "\n",
+        encoding="utf-8",
+    )
+    queue, is_demo = load_exception_queue(tmp_path)
+    assert is_demo is False and len(queue) == 1
+    row = format_exception_table_rows(queue)[0]
+    assert row["Match level"] == "Street (S4)"
+    assert queue[0]["narrative"] == "Needs a house number."
+    assert plain_flag_reason("street-level only") == "Precisely found the street but not the building (no house number match)."
+    assert plain_flag_reason("postal or city level") == "Precisely could only match the ZIP code or city."
+    assert plain_flag_reason("location conflict (state mismatch)") == "The state does not match the rest of the address."
+    assert all(
+        str(r.get("confidence", "")).strip() in ("", "Not available") for r in queue
+    )
+
+
+def test_build_profile_does_not_set_private_workbook_note():
+    profile = build_profile("Acme", "acme", _map_for_sample())
+    assert "private_workbook_note" not in profile["data_handling"]

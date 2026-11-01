@@ -43,7 +43,8 @@ _REVIEW_REASON_LABELS = {
 
 
 def _match_level(value: Any) -> str:
-    code = str(value).strip().upper()
+    tokens = [token.strip().upper()[:2] for token in str(value).split(",") if token.strip()]
+    code = ", ".join(tokens)
     if code.startswith(("S5", "S7", "S8")):
         return f"Building ({code})"
     if code.startswith("S4"):
@@ -51,6 +52,19 @@ def _match_level(value: Any) -> str:
     if code.startswith(("Z", "G")):
         return f"ZIP/city ({code})"
     return code
+
+
+_PLAIN_FLAG_REASONS = {
+    "street-level only": "Precisely found the street but not the building (no house number match).",
+    "postal or city level": "Precisely could only match the ZIP code or city.",
+    "location conflict (state mismatch)": "The state does not match the rest of the address.",
+    "state conflict": "The state does not match the rest of the address.",
+}
+
+
+def plain_flag_reason(value: Any) -> str:
+    reason = str(value).strip()
+    return _PLAIN_FLAG_REASONS.get(reason.casefold(), _review_reason(reason) if reason else "")
 
 
 def _review_reason(value: Any) -> str:
@@ -419,9 +433,33 @@ def load_exception_queue(
         for row in _read_jsonl(root / "narratives.jsonl")
     }
     if not demo and (results or diagnoses or actions):
+        ai_off = not diagnoses and not actions
+        narrative_text = lambda pid: (
+            narratives.get(pid, {}).get("narrative")
+            or narratives.get(pid, {}).get("text", "")
+        )
+        na = "Not available"
         queue = []
         for result in results:
             if result.get("eligibility") != "manual_review":
+                continue
+            if ai_off:
+                queue.append(
+                    {
+                        "policy_id": result.get("policy_id", ""),
+                        "manual_review_reason": result.get("manual_review_reason", ""),
+                        "precision_code": result.get("precision_code", ""),
+                        "ai_cause_set": na,
+                        "confidence": na,
+                        "next_action": "analyst_review",
+                        "suggestion_status": na,
+                        "verification_status": na,
+                        "suggestion": {},
+                        "rationale": "",
+                        "verification": {},
+                        "narrative": narrative_text(result.get("policy_id", "")),
+                    }
+                )
                 continue
             policy_id = result.get("policy_id", "")
             diagnosis = diagnoses.get(policy_id, {})

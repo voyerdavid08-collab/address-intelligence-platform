@@ -31,6 +31,7 @@ from address_intelligence.narrative import (
 from address_intelligence.pipeline import _candidate, _geocode_reason
 from address_intelligence.providers.precisely import PreciselyClient, ProviderResponse
 from address_intelligence.remediation import (
+    NO_CALIBRATION_MESSAGE,
     _safe_groq_error_reason,
     build_model_input,
 )
@@ -779,6 +780,8 @@ class ExceptionActionWorkflow:
         )
 
     def _ground_truth(self) -> dict[str, set[str]]:
+        if self.ground_truth_path is None:
+            raise ValueError(NO_CALIBRATION_MESSAGE)
         return {
             row["policy_id"]: _truth_labels(row.get("defects", ""))
             for row in _read_csv(self.ground_truth_path)
@@ -827,6 +830,8 @@ class ExceptionActionWorkflow:
         return evaluation
 
     def _ground_truth_row(self, policy_id: str) -> dict[str, str]:
+        if self.ground_truth_path is None:
+            raise ValueError(NO_CALIBRATION_MESSAGE)
         for row in _read_csv(self.ground_truth_path):
             if row["policy_id"] == policy_id:
                 return row
@@ -996,6 +1001,9 @@ def run_remediation_cli(argv: list[str] | None = None) -> int:
             f"Remediation is disabled by client profile '{profile.data['client']['name']}'; "
             "no remediation work was run."
         )
+        return 0
+    if profile.ground_truth_path is None:
+        print(NO_CALIBRATION_MESSAGE)
         return 0
     settings = Settings.from_env(profile_path=args.profile)
     ledger = CreditLedger(settings.credit_hard_cap)

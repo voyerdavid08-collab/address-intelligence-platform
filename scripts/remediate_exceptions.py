@@ -5,6 +5,7 @@ import os
 import sys
 
 from address_intelligence.client_profile import load_client_profile
+from address_intelligence.remediation import NO_CALIBRATION_MESSAGE
 from address_intelligence.remediation_actions import run_remediation_cli
 
 
@@ -19,6 +20,9 @@ def main(argv: list[str] | None = None) -> int:
             f"Remediation is disabled by client profile '{profile.data['client']['name']}'; "
             "no remediation work was run."
         )
+        return 0
+    if profile.ground_truth_path is None:
+        print(NO_CALIBRATION_MESSAGE)
         return 0
     if options.profile is not None:
         os.environ["CLIENT_PROFILE"] = str(profile.path)

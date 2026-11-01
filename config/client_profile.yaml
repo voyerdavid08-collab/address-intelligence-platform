@@ -55,4 +55,8 @@ ai:
 data_handling:
   publish_row_level: false
   retention_days: 30
+  private_workbook_note:
+    - "Confidential: contains Precisely API Content (Precisely APIs Acceptable Use Policy, April 2021, \u00a74.1\u20134.2)."
+    - "Shared only with the Precisely review team for assignment evaluation. Not published; local copies are stored securely and deleted by 2026-11-27 (within 30 days of retrieval)."
+    - "The public version of this workbook in the repository contains the same tabs, with made-up example rows in Validated and Enriched."
   note: "Precisely APIs AUP (April 2021) §4.1–4.2: no public row-level display; temporary secure storage only."
