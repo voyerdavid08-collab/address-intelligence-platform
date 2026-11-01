@@ -94,7 +94,10 @@ def _read_policies(
     with path.open(newline="", encoding="utf-8-sig") as source:
         reader = csv.DictReader(source)
         mapping = selected_profile.column_mapping
-        missing = sorted(set(mapping.values()) - set(reader.fieldnames or ()))
+        missing = sorted(
+            {name for name in mapping.values() if name is not None}
+            - set(reader.fieldnames or ())
+        )
         if missing:
             raise ValueError(
                 f"Client input is missing mapped column(s): {', '.join(missing)}."
@@ -112,6 +115,9 @@ def _read_policies(
         for source_row in reader:
             row = dict(source_row)
             for canonical, source_name in mapping.items():
+                if source_name is None:
+                    row[internal_names[canonical]] = ""
+                    continue
                 row[internal_names[canonical]] = source_row[source_name]
             rows.append(row)
         return rows
@@ -584,17 +590,19 @@ class StagedPipeline:
         eligible: list[tuple[dict[str, str], ProviderResponse]],
     ) -> list[tuple[dict[str, str], ProviderResponse]]:
         grouped: dict[str, list[tuple[dict[str, str], ProviderResponse]]] = {}
+        group_by_state = self.profile.column_mapping.get("metro") is None
         for item in eligible:
-            grouped.setdefault(item[0]["metro"], []).append(item)
-        metros = sorted(grouped)
-        if not metros or not self.profile.comparison_enabled:
+            group_name = item[0]["raw_state"] if group_by_state else item[0]["metro"]
+            grouped.setdefault(group_name, []).append(item)
+        groups = sorted(grouped)
+        if not groups or not self.profile.comparison_enabled:
             return []
         target = min(self.comparison_sample_size, len(eligible))
-        base, remainder = divmod(target, len(metros))
+        base, remainder = divmod(target, len(groups))
         rng = random.Random(self.seed)
         selected = []
-        for index, metro in enumerate(metros):
-            records = sorted(grouped[metro], key=lambda item: item[0]["policy_id"])
+        for index, group_name in enumerate(groups):
+            records = sorted(grouped[group_name], key=lambda item: item[0]["policy_id"])
             count = min(len(records), base + (index < remainder))
             selected.extend(rng.sample(records, count))
         if len(selected) < target:

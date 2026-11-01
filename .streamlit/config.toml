@@ -1,0 +1,20 @@
+[server]
+address = "localhost"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#12A3B4"
+textColor = "#1F2A37"
+base = "light"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F8FA"
+font = "Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif"
+headingFont = "Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif"
+baseRadius = "8px"
+borderColor = "#E3E8EF"
+
+[client]
+toolbarMode = "minimal"

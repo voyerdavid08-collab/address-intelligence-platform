@@ -102,7 +102,7 @@ class ClientProfile:
         return candidate if candidate.is_absolute() else self.project_root / candidate
 
     @property
-    def column_mapping(self) -> dict[str, str]:
+    def column_mapping(self) -> dict[str, str | None]:
         return dict(self.data["input"]["column_mapping"])
 
     @property
@@ -175,7 +175,9 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
             raise _config_error("client.country must be a non-empty string.")
         input_config = data["input"]
         mapping = input_config["column_mapping"]
-        missing_mapping = set(CANONICAL_COLUMNS) - set(mapping)
+        if not isinstance(mapping, dict):
+            raise _config_error("input.column_mapping must be a mapping.")
+        missing_mapping = (set(CANONICAL_COLUMNS) - {"metro"}) - set(mapping)
         if missing_mapping:
             raise _config_error(
                 f"Missing mapped column(s): {', '.join(sorted(missing_mapping))}."
@@ -185,6 +187,14 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
             raise _config_error(
                 f"Unknown canonical column mapping key(s): {', '.join(sorted(unknown_mapping))}."
             )
+        for canonical, source_name in mapping.items():
+            if canonical in {"address_line2", "metro"} and source_name is None:
+                continue
+            if not isinstance(source_name, str) or not source_name.strip():
+                raise _config_error(
+                    f"input.column_mapping.{canonical} must be a column name"
+                    + (" or null." if canonical in {"address_line2", "metro"} else ".")
+                )
         if input_config["id_column"] != mapping["policy_id"]:
             raise _config_error("input.id_column must match input.column_mapping.policy_id.")
         if not isinstance(input_config["path"], str) or not input_config["path"]:
@@ -289,7 +299,9 @@ def _validate_profile(data: Any, profile_path: Path, project_root: Path) -> Clie
             columns = set(next(csv.reader(source), []))
     except OSError as exc:
         raise _config_error(f"Unable to read client input file: {exc}.") from None
-    missing_columns = sorted(set(mapping.values()) - columns)
+    missing_columns = sorted(
+        {name for name in mapping.values() if name is not None} - columns
+    )
     if missing_columns:
         raise _config_error(
             f"Client input is missing mapped column(s): {', '.join(missing_columns)}."
@@ -351,7 +363,9 @@ def read_client_policies(profile: ClientProfile) -> list[dict[str, str]]:
         reader = csv.DictReader(source)
         columns = set(reader.fieldnames or ())
         mapping = profile.column_mapping
-        missing = sorted(set(mapping.values()) - columns)
+        missing = sorted(
+            {name for name in mapping.values() if name is not None} - columns
+        )
         if missing:
             raise _config_error(
                 f"Client input is missing mapped column(s): {', '.join(missing)}."
@@ -360,6 +374,9 @@ def read_client_policies(profile: ClientProfile) -> list[dict[str, str]]:
         for source_row in reader:
             row = dict(source_row)
             for canonical, source_name in mapping.items():
+                if source_name is None:
+                    row[_INTERNAL_COLUMN_NAMES[canonical]] = ""
+                    continue
                 row[_INTERNAL_COLUMN_NAMES[canonical]] = source_row[source_name]
             rows.append(row)
         return rows
