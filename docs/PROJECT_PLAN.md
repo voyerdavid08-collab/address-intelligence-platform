@@ -208,48 +208,56 @@ production data platform.
 ```text
 precisely_project/
 ├── README.md
-├── pyproject.toml                 # or requirements.txt; choose after checking repo conventions
+├── pyproject.toml
 ├── .env.example                   # names/placeholders only; never credentials
 ├── .gitignore
-├── main.py                        # minimal CLI entry point, if useful
 ├── config/
-│   └── client_profile.yaml        # client-specific columns, attributes, rules
-├── app/                            # local-only Streamlit application
+│   ├── client_profile.yaml        # client-specific columns, attributes, rules
+│   └── examples/                  # example profiles
+├── app/
+│   ├── streamlit_app.py
+│   ├── ui.py
+│   └── demo_data/
+├── .streamlit/
+│   └── config.toml
 ├── src/
 │   └── address_intelligence/
-│       ├── __init__.py
+│       ├── client_profile.py
 │       ├── config.py
-│       ├── models.py              # canonical typed contracts
-│       ├── pipeline.py            # deterministic orchestration
-│       ├── remediation.py         # AI-assisted exception diagnosis/suggestion
+│       ├── credits.py
+│       ├── providers/precisely.py
+│       ├── pipeline.py
+│       ├── flood.py
+│       ├── narrative.py
+│       ├── remediation.py
+│       ├── remediation_actions.py
 │       ├── metrics.py
-│       ├── reporting.py
+│       ├── workbook.py
+│       ├── baseline.py
 │       ├── synthetic_data.py
-│       ├── providers/
-│       │   ├── precisely.py       # provider interface/mapping
-│       │   └── llm.py             # focused model client interface
-│       ├── workflows/
-│       │   ├── enrichment.py
-│       │   └── risk_narrative.py
-│       └── insurance/
-│           └── rules.py           # scenario rules, kept out of generic pipeline
+│       ├── onboarding.py
+│       ├── app_data.py
+│       └── logging_setup.py
 ├── data/
 │   ├── input/                     # synthetic input only
-│   └── output/                    # generated outputs; ignore run-specific files
+│   ├── clients/                    # git-ignored client input and profiles
+│   └── output/                     # git-ignored per-client outputs
+├── scripts/
 ├── reports/                        # baseline, narrative, and remediation summaries
 ├── tests/
 │   ├── unit/
 │   ├── fixtures/
-│   └── integration/               # opt-in; requires credentials and budget gate
 ├── docs/
 │   ├── PROJECT_PLAN.md
 │   ├── ARCHITECTURE.md
 │   └── BUSINESS_IMPACT.md
-└── .github/                       # optional later, only if existing CI is appropriate
+└── main.py                         # local configuration check
 ```
 
-This plan tracks the implementation; listed paths include implemented modules
-and remaining work.
+The implemented repository structure is shown above. The earlier proposed
+`models.py`, `reporting.py`, `providers/llm.py`, `workflows/`, and `insurance/`
+modules were not needed; their responsibilities are handled by the listed
+modules.
 Prefer a small runnable package over a notebook-only design because reusable
 interfaces and repeatable tests matter; optionally add a notebook only if it
 materially improves the live demonstration.
@@ -697,14 +705,14 @@ API access path.
 
 | Phase | Work / status | Dependencies | Acceptance criteria |
 |---|---|---|---|
-| 0. Plan and access discovery | COMPLETE (Oct 27–29) | Account access | Access, policy, account and API decisions recorded. |
-| 1. Minimal foundation | COMPLETE (Oct 27–29) | Phase 0 | Local setup, secret handling, configuration, ledger and tests complete. |
-| 2. Synthetic data and baseline | COMPLETE (Oct 27–29) | Phase 1 | Deterministic 200-record dataset, defect ground truth and baseline complete. |
-| 3. Precisely address and geocoding | COMPLETE (full run Oct 29) | Verified APIs and credit plan | 200-row run, 170 eligible; outcomes and billing reconciled. |
-| 4. Enrichment and Risk 2 comparison | COMPLETE (full run Oct 29) | Phase 3 | Selected enrichments and coarse-vs-verified comparison complete; coverage gaps disclosed. |
-| 5. Evidence-grounded narrative | COMPLETE (Oct 29) | Enrichment fields | Allowlist, deterministic disclosure, guardrails, cache and human evaluation complete. |
-| 6. AI-assisted exception remediation | IN PROGRESS | Ground truth, profile and remaining credit budget | Calibrated diagnosis, verified suggestions, human routing, and held-out evaluation. |
-| 7. Reporting, app and submission | IN PROGRESS | Phases 0–6 | Metrics, business summary, client profile, local app, documentation and final validation. |
+| 0. Plan and access discovery | DONE | Account access | Access, policy, account and API decisions recorded. |
+| 1. Minimal foundation | DONE | Phase 0 | Local setup, secret handling, configuration, ledger and tests complete. |
+| 2. Synthetic data and baseline | DONE | Phase 1 | Deterministic 200-record dataset, defect ground truth and baseline complete. |
+| 3. Precisely address and geocoding | DONE | Verified APIs and credit plan | 200-row run, 170 eligible; outcomes and billing reconciled. |
+| 4. Enrichment and Risk 2 comparison | DONE | Phase 3 | Selected enrichments and coarse-vs-verified comparison complete; coverage gaps disclosed. |
+| 5. Evidence-grounded narrative | DONE | Enrichment fields | Allowlist, deterministic disclosure, guardrails, cache and human evaluation complete. |
+| 6. AI-assisted exception remediation | DONE | Ground truth, profile and remaining credit budget | Calibrated diagnosis, verified suggestions, human routing, and held-out evaluation. |
+| 7. Reporting, app and submission | IN PROGRESS: documentation done; final checks, publication and submission remaining | Phases 0–6 | Metrics, business summary, client profile, local app, documentation and final validation. |
 
 **Phase 7 submission hygiene:** internal planning documents, including this
 file, are not submitted. Reviewer-facing documents are `README.md`,
@@ -795,15 +803,15 @@ assumptions and keep visibility unchanged until authorized.
 - [ ] PreciselyID is included only if genuinely supported and returned.
 - [ ] Three to five verified enrichment attributes are included for eligible
   records, or any inability to meet the requirement is explicitly disclosed.
-- [ ] Before/after output and summary metrics include match/standardization
+- [x] Before/after output and summary metrics include match/standardization
   measures and coordinate coverage with clear denominators.
 - [ ] E1b: Build the public workbook with synthetic example rows only and the
   private, complete workbook for secure reviewer sharing; keep the private file
   under `data/output/` and out of version control.
 - [ ] API/fixture/simulated/synthetic provenance is visible and unambiguous.
-- [ ] One focused AI capability is functional, tested, and evidence-grounded;
+- [x] One focused AI capability is functional, tested, and evidence-grounded;
   limitations and human-review boundary are stated.
-- [ ] Mandatory one-page VP impact summary communicates the business problem,
+- [x] Mandatory one-page VP impact summary communicates the business problem,
   quantifies two cost/revenue risks, explains how the solution mitigates them,
   and states AI's incremental value beyond enrichment; measurements and
   assumptions are clearly distinguished; deliver as `docs/BUSINESS_IMPACT.md`
@@ -829,20 +837,19 @@ assumptions and keep visibility unchanged until authorized.
 - [ ] No commit, push, publication, branch deletion, or history change occurs
   without explicit approval.
 
+- [x] README and architecture documentation are complete.
+- [x] Client profile and local app are complete.
+- [x] Live end-to-end test of a new client is complete.
+
 ## 20. In-scope local Streamlit app and optional enhancements
 
-### Streamlit app (time-boxed, in scope)
+### Streamlit app (built; local only)
 
-- Run locally only; never deploy publicly because the app may load row-level
-  Precisely data and API keys.
-- Provide a demo mode using clearly labelled made-up data and no API keys.
+- Built with onboarding, pre-flight, cost, and client results tabs; it runs
+  locally only and is not deployed.
+- Made-up demo data are available without API calls.
 - Allow loading a privately shared row-level CSV locally.
 - Screenshots may contain aggregates or made-up data only.
-- Tabs: **Profile + cost estimate**; **Results** (metrics and Risk 2); and
-  **Exceptions** (queue with diagnosis, confidence, verified fix, and
-  narratives).
-- Drop the app if it is not working by end of Nov 2; prioritize the business
-  summary, remediation, and metrics.
 
 ### Optional enhancements
 
