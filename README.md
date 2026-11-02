@@ -186,7 +186,7 @@ A 6-record Excel file with different column names was onboarded in the app and r
 
 ## How this was built
 
-Built with AI coding assistants (GitHub Copilot for implementation; Claude for architecture review and verification). Every change was reviewed, tested and approved by the author; paid API calls always required explicit human approval.
+Designed, scoped, directed, tested and approved by the author; implemented with AI coding assistants (GitHub Copilot for implementation, Claude for architecture review and verification). Every change was reviewed and verified before it was accepted, and paid API calls always required the author's explicit approval.
 
 ## Privacy by design
 
