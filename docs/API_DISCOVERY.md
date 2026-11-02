@@ -98,27 +98,27 @@ comparison (PROJECT_PLAN.md Sections 15–16).
 
 ## Phase 0 decisions
 
-- **Owner-approved 2026-10-28** — United States addresses only; `N = 200`
+- **Owner-approved 2026-10-28:** United States addresses only; `N = 200`
   records.
-- **Owner-approved 2026-10-28** — Geocode Premium is the sole verification,
+- **Owner-approved 2026-10-28:** Geocode Premium is the sole verification,
   standardization, and geocoding step. Address Verification is dropped from
   the full run because it returned “Address Not Found” for defective input and
   still charged 1 credit.
-- **Owner-approved 2026-10-28** — Enrichment eligibility is precisionCode
+- **Owner-approved 2026-10-28:** Enrichment eligibility is precisionCode
   S5, S7, or S8 only.
-- **Owner-approved 2026-10-28** — Any record with precisionCode other than
+- **Owner-approved 2026-10-28:** Any record with precisionCode other than
   S5/S7/S8 (for example S4, Z*, G*, or S0) is not enriched and is routed to a
   “manual review” category with the reason recorded.
-- **Owner-approved 2026-10-28** — Selected enrichment: flood zone code,
+- **Owner-approved 2026-10-28:** Selected enrichment: flood zone code,
   flood risk level, and base flood elevation from one flood call; distance to
   flood hazard; and one property attribute, `builtYear`.
-- **Owner-approved 2026-10-28** — Risk APIs are called by location using
+- **Owner-approved 2026-10-28:** Risk APIs are called by location using
   pipeline coordinates.
-- **Owner-approved 2026-10-28** — Property v2 requests use the Premium
+- **Owner-approved 2026-10-28:** Property v2 requests use the Premium
   standardized address, not the raw input.
-- **Owner-approved 2026-10-28** — Fire station and fire risk excluded on
+- **Owner-approved 2026-10-28:** Fire station and fire risk excluded on
   cost/relevance grounds; crime and demographics excluded on fairness grounds.
-- **Owner-approved 2026-10-28** — Risk 2 comparison is revised because
+- **Owner-approved 2026-10-28:** Risk 2 comparison is revised because
   Premium auto-corrects defective input, so comparing raw and Premium-verified
   locations would show no difference. For an approximately 40-record subset,
   compare a coarse location from Geocode Basic with the verified building
@@ -126,7 +126,7 @@ comparison (PROJECT_PLAN.md Sections 15–16).
   points. Basic is a proxy for low-precision location assignment, not a claim
   about any specific carrier's process. Comparison cost is 5.1 credits per
   record (Basic 0.1 + flood 5).
-- **Owner-approved 2026-10-28** — Hard credit cap 2,150 (reserve floor ≈14%,
+- **Owner-approved 2026-10-28:** Hard credit cap 2,150 (reserve floor ≈14%,
   350 credits) instead of 20%, because failed calls are not charged and
   successful results will be cached. Ledger must be reconciled with the portal
   dashboard before each live run.

@@ -171,7 +171,7 @@ Client results: aggregate results and the work list (made-up examples).
 
 ## Testing
 
-Run `pytest`. The last run passed 345 tests. Unit tests use temporary folders and a temporary credit ledger.
+Run `pytest`. The last run passed 347 tests. Unit tests use temporary folders and a temporary credit ledger.
 
 ### Live end-to-end test of a new client
 
@@ -221,7 +221,7 @@ For a new client, Layer 1 needs a labelled calibration sample of the client's ow
 
 ## AI provider choice and data handling
 
-Groq was selected for the brief's free-tier requirement (free plan, $0). Its Services Agreement §4.2 prohibits training on inputs and outputs, and organization-wide Zero Data Retention is enabled in the Groq console; without that setting, Groq states inputs and outputs may be stored for up to 30 days. The selected model, `openai/gpt-oss-120b`, is open-weight and hosted by Groq; requests are sent to Groq, not OpenAI. Only the derived allowlisted fields needed for the narrative are sent—never addresses, coordinates, ZIP codes, PreciselyIDs, water-body names, or policy IDs. Row-level Precisely outputs remain private and temporary, consistent with the Precisely APIs Acceptable Use Policy §4.1–4.2. Gemini API's free tier was excluded because prompts may be used to improve products, human review is involved, and its terms advise against confidential data. Hugging Face was excluded because its approximately $0.10/month credit and provider-dependent terms do not meet the use case; running a local model is impractical on the available hardware. Production use would require an enterprise agreement with a data processing addendum.
+Groq was selected for the brief's free-tier requirement (free plan, $0). Its Services Agreement §4.2 prohibits training on inputs and outputs, and organization-wide Zero Data Retention is enabled in the Groq console; without that setting, Groq states inputs and outputs may be stored for up to 30 days. The selected model, `openai/gpt-oss-120b`, is open-weight and hosted by Groq; requests are sent to Groq, not OpenAI. Only the derived allowlisted fields needed for the narrative are sent, never addresses, coordinates, ZIP codes, PreciselyIDs, water-body names, or policy IDs. Row-level Precisely outputs remain private and temporary, consistent with the Precisely APIs Acceptable Use Policy §4.1–4.2. Gemini API's free tier was excluded because prompts may be used to improve products, human review is involved, and its terms advise against confidential data. Hugging Face was excluded because its approximately $0.10/month credit and provider-dependent terms do not meet the use case; running a local model is impractical on the available hardware. Production use would require an enterprise agreement with a data processing addendum.
 
 ## Credit ledger
 

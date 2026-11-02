@@ -1,4 +1,4 @@
-# Address Intelligence Platform — Project Plan
+# Address Intelligence Platform: Project Plan
 
 ## 1. Executive summary and solution vision
 
@@ -23,10 +23,10 @@ portfolio.
 
 ### Classification used in this plan
 
-- **Explicit requirement** — stated in the candidate assignment.
-- **Recommended decision** — an implementation choice proposed here to meet
+- **Explicit requirement:** stated in the candidate assignment.
+- **Recommended decision:** an implementation choice proposed here to meet
   the assignment with appropriate safety and proportionate complexity.
-- **Optional enhancement** — useful if time and access permit, but not needed
+- **Optional enhancement:** useful if time and access permit, but not needed
   for the core submission.
 
 ## 2. Assignment requirements traceability
@@ -41,7 +41,7 @@ portfolio.
 | R6 | Write a one-page VP of Operations business impact summary that communicates the business problem, quantifies two relevant risks in cost or revenue terms, explains how the proposed solution mitigates them, and explains the incremental value of AI beyond enrichment. | `docs/BUSINESS_IMPACT.md` with all financial inputs labelled as measured, sourced, or assumed; optional PDF export. |
 | R7 | Everything runs locally on a laptop using free-tier services; no cloud infrastructure required. | Reproducible local setup and run instructions; no AWS, Azure, or GCP dependency. |
 | R8 | Precisely free trial is described as 2,500 credits valid for 30 days; plan use and do not exhaust credits during exploration. | Written budget gate, measured/verified credit assumptions before calls, and a conservative execution plan. |
-| R9 | Deliver a public GitHub repository containing runnable commented code or notebook, README with setup, `.env` key structure and sample outputs; before/after CSV or Excel workbook (`reports/before_after_workbook.xlsx`) with summary stats; and the one-page impact summary. | Repository contents and final checklist. The current repository is private; changing it to public is a publication/visibility change and must be explicitly approved before it is made. |
+| R9 | Deliver a public GitHub repository containing runnable commented code or notebook, README with setup, `.env` key structure and sample outputs; before/after CSV or Excel workbook (`reports/before_after_workbook.xlsx`) with summary stats; and the one-page impact summary. | Repository contents and final checklist. |
 
 ### Explicit requirements versus scope boundaries
 
@@ -52,9 +52,7 @@ portfolio.
 - The assignment calls for a functional prototype. It does not require
   production deployment, enterprise-scale processing, automated underwriting
   decisions, a web UI, or a distributed system.
-- A public repository is an explicit submission requirement. This repository
-  is currently private. Do not change visibility or publish sample data/code
-  without the owner's explicit approval.
+- A public repository is an explicit submission requirement.
 
 ### Mandatory and optional deliverables
 
@@ -65,9 +63,7 @@ location enrichment attributes subject to actual product access and
 documented API capabilities; one functional, evidence-grounded AI workflow;
 before/after data, metrics, and documented results; a README covering setup,
 configuration, and sample outputs; and the one-page business impact summary.
-These artifacts are to be submitted in a public GitHub repository, subject to
-the current private-repository visibility constraint and explicit approval
-before changing visibility or publishing.
+These artifacts are to be submitted in a public GitHub repository.
 
 **Optional enhancements:** only those listed in Section 20; they do not
 replace or delay mandatory deliverables.
@@ -159,19 +155,19 @@ flowchart LR
 | Metrics/reporting | Calculate defined quality measures and export row-level results and aggregate summaries with provenance. |
 | Configuration and logging | Load non-secret settings from configuration and secrets from environment; emit useful stage, timing, count, and error information. |
 
-**Decision — deterministic orchestration, not an autonomous agent
+**Decision: deterministic orchestration, not an autonomous agent
 (recommended):** the assignment needs a repeatable, auditable pipeline and one
 focused AI step. A deterministic orchestrator is easier to budget, test,
 explain, and reproduce than an autonomous agent. The trade-off is less
 open-ended behavior, which is appropriate for a constrained customer demo.
 
-**Decision — provider adapters and canonical contracts (recommended):**
+**Decision: provider adapters and canonical contracts (recommended):**
 isolate Precisely-specific request/response details so other scenarios or
 providers do not require rewriting core processing. The trade-off is a small
 amount of interface/mapping code; avoid a generalized plugin framework until
 there is a second concrete implementation.
 
-**Decision — local files, no database (recommended):** CSV/JSON artifacts are
+**Decision: local files, no database (recommended):** CSV/JSON artifacts are
 sufficient for a 200–500-row laptop demo and directly meet the assignment's
 output needs. The trade-off is that this is not a concurrent, durable,
 production data platform.
@@ -206,7 +202,7 @@ production data platform.
 ## 6. Proposed repository and module structure
 
 ```text
-precisely_project/
+address-intelligence-platform/
 ├── README.md
 ├── pyproject.toml
 ├── .env.example                   # names/placeholders only; never credentials
@@ -305,7 +301,7 @@ Before implementation or any API call:
 8. Record links, access outcome, date checked, and unresolved questions in
    implementation documentation; redact credentials and account identifiers.
 
-**Decision — documentation-first integration (recommended):** avoid guessed
+**Decision: documentation-first integration (recommended):** avoid guessed
 endpoints and speculative SDK use. The trade-off is that the provider adapter
 cannot be finalized until access is confirmed; this prevents wasted trial
 credits and incorrect claims.
@@ -547,7 +543,7 @@ were submitted.
 4. **Evaluate:** report exceptions cleared, incorrect fixes (target 0) against
    ground truth, empirical test-split coverage, and mean prediction-set size.
 
-This step sends the submitted synthetic address to the LLM—not
+This step sends the submitted synthetic address to the LLM, not
 Precisely-returned addresses, coordinates, or IDs. In production the address is
 personal data; require an enterprise agreement/DPA or self-hosted model.
 Limitations: small calibration set, coarse K=5 sampling, and exchangeability
@@ -712,13 +708,9 @@ API access path.
 | 4. Enrichment and Risk 2 comparison | DONE | Phase 3 | Selected enrichments and coarse-vs-verified comparison complete; coverage gaps disclosed. |
 | 5. Evidence-grounded narrative | DONE | Enrichment fields | Allowlist, deterministic disclosure, guardrails, cache and human evaluation complete. |
 | 6. AI-assisted exception remediation | DONE | Ground truth, profile and remaining credit budget | Calibrated diagnosis, verified suggestions, human routing, and held-out evaluation. |
-| 7. Reporting, app and submission | IN PROGRESS: documentation done; final checks, publication and submission remaining | Phases 0–6 | Metrics, business summary, client profile, local app, documentation and final validation. |
+| 7. Reporting, app and submission | DONE | Phases 0–6 | Metrics, business summary, client profile, local app, documentation and final validation. |
 
-**Phase 7 submission hygiene:** internal planning documents, including this
-file, are not submitted. Reviewer-facing documents are `README.md`,
-`docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The public repository
-must present a clean history; decide the approach in Phase 7, without
-rewriting history or publishing before explicit approval.
+**Phase 7 submission hygiene:** reviewer-facing documents are README.md, docs/ARCHITECTURE.md and docs/BUSINESS_IMPACT.md. This plan is kept as the project record.
 
 **Phase 7 Data licensing:**
 
@@ -749,20 +741,7 @@ rewriting history or publishing before explicit approval.
 
 ### Schedule
 
-Deadline: Nov 6. Target submission: Nov 3. Nov 4–5 are buffers.
-
-| Date | Planned work |
-|---|---|
-| Oct 29–30 | Docs catch-up and remediation diagnosis |
-| Oct 31 | Suggestion/verification and optional narrative clarity fix |
-| Nov 1 | Metrics/reports and client profile |
-| Nov 2 | Time-boxed Streamlit app and business impact summary |
-| Nov 3 | README/ARCHITECTURE, final validation and target submission |
-| Nov 4–5 | Buffer |
-| Nov 6 | Deadline |
-
-If schedule is constrained, prioritize: business summary > remediation >
-metrics > app > narrative clarity.
+Delivered between Oct 27 and Nov 2, ahead of the Nov 6 deadline.
 
 ## 18. Risks, mitigations, and open items
 
@@ -779,36 +758,32 @@ metrics > app > narrative clarity.
 | Local app could expose row-level Precisely outputs or API keys. | Never publicly deploy; local-only use; demo mode uses clearly labelled made-up data without keys; privately shared CSV may be loaded locally; screenshots use aggregates or made-up data only. |
 | LLM fabricates or overstates conclusions. | Allowlist evidence, require grounded output, test abstention, human review, and label generated narrative. |
 | Network or record-level API failures leave partial outputs. | Explicit statuses, bounded retries, persist stage results, and report incomplete stages without silent substitutions. |
-| Public-repository requirement conflicts with repository visibility controls. | Keep repository private until explicit approval; publish only approved files and no row-level Precisely data. |
 | The exact financial inputs for the VP summary are absent. | Use a transparent assumption table/ranges or request approved carrier baselines; do not present invented values as fact. |
 
-No remaining technical item blocks the current work. Financial baselines and
-repository-publication approval remain governance inputs; use labelled
-assumptions and keep visibility unchanged until authorized.
+No open items remain. Financial inputs in the business summary are labelled assumptions.
 
 ## 19. Final submission checklist
 
-- [ ] Public GitHub repository contains all approved submission artifacts;
-  repository visibility changed only with explicit owner approval.
-- [ ] README explains purpose, local setup/run, dependencies, `.env` variable
+- [x] Public GitHub repository contains all approved submission artifacts.
+- [x] README explains purpose, local setup/run, dependencies, `.env` variable
   names, sample outputs, data provenance, API caveats, and limitations.
-- [ ] No secrets, real personal data, unapproved API payloads, or sensitive
+- [x] No secrets, real personal data, unapproved API payloads, or sensitive
   account details are committed.
-- [ ] Reproducible synthetic CSV contains 200–500 records; defect injection
+- [x] Reproducible synthetic CSV contains 200–500 records; defect injection
   types, counts, dirty percentage, and seed are documented.
-- [ ] Geocode Premium verification/standardization and geocoding results are
+- [x] Geocode Premium verification/standardization and geocoding results are
   included, or unmet live API access is prominently disclosed. Address
   Verification is not used in the full run because Status F “Address Not
   Found” on defective input was still charged.
-- [ ] PreciselyID is included only if genuinely supported and returned.
-- [ ] Three to five verified enrichment attributes are included for eligible
+- [x] PreciselyID is included only if genuinely supported and returned.
+- [x] Three to five verified enrichment attributes are included for eligible
   records, or any inability to meet the requirement is explicitly disclosed.
 - [x] Before/after output and summary metrics include match/standardization
   measures and coordinate coverage with clear denominators.
-- [ ] E1b: Build the public workbook with synthetic example rows only and the
+- [x] Build the public workbook with synthetic example rows only and the
   private, complete workbook for secure reviewer sharing; keep the private file
   under `data/output/` and out of version control.
-- [ ] API/fixture/simulated/synthetic provenance is visible and unambiguous.
+- [x] API/fixture/simulated/synthetic provenance is visible and unambiguous.
 - [x] One focused AI capability is functional, tested, and evidence-grounded;
   limitations and human-review boundary are stated.
 - [x] Mandatory one-page VP impact summary communicates the business problem,
@@ -816,26 +791,21 @@ assumptions and keep visibility unchanged until authorized.
   and states AI's incremental value beyond enrichment; measurements and
   assumptions are clearly distinguished; deliver as `docs/BUSINESS_IMPACT.md`
   with optional PDF export.
-- [ ] Setup and offline tests run from documented instructions; actual test
+- [x] Setup and offline tests run from documented instructions; actual test
   and live integration results are accurately reported.
-- [ ] Data licensing: no row-level Precisely API outputs (coordinates, flood
+- [x] Data licensing: no row-level Precisely API outputs (coordinates, flood
   zones, property attributes, PreciselyIDs) are published publicly, per
   Precisely APIs Acceptable Use Policy (April 2021) §4.1 (no public display)
   and §4.2 (temporary storage only, maximum 30 days).
-- [ ] Data licensing: public repository includes code, synthetic input CSV
+- [x] Data licensing: public repository includes code, synthetic input CSV
   (“before”), aggregate before/after summary CSV, output schema with clearly
   labelled made-up example rows, and a README “Data licensing” section citing
   §4.1–4.2.
-- [ ] Data licensing: row-level output is shared privately with the review
+- [x] Data licensing: row-level output is shared privately with the review
   team at submission with a one-line policy note; local raw API outputs and
   caches are deleted within 30 days of retrieval.
-- [ ] Submission hygiene: internal planning documents, including
-  `docs/PROJECT_PLAN.md`, are not submitted. Reviewer-facing documents are
-  `README.md`, `docs/ARCHITECTURE.md`, and `docs/BUSINESS_IMPACT.md`. The
-  public repository must present a clean history; decide the approach in
-  Phase 7 without rewriting history or publishing before approval.
-- [ ] No commit, push, publication, branch deletion, or history change occurs
-  without explicit approval.
+- [x] Submission hygiene: reviewer-facing documents are identified; this plan is kept as the project record.
+- [x] No commit, push, publication or history change occurred without explicit owner approval.
 
 - [x] README and architecture documentation are complete.
 - [x] Client profile and local app are complete.

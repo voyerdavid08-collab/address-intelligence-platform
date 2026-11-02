@@ -87,9 +87,9 @@ Narratives are checked for valid JSON, grounded numbers, allowed evidence fields
 
 ### Exception handling
 
-**Layer 1 — diagnosis:** the model samples each exception 5 times; split-conformal prediction, calibrated on labelled examples, forms a set of likely causes and supports routing. In the reference run, top-answer accuracy was 62/68 and test coverage was 32/34 at a 90% target.
+**Layer 1, diagnosis:** the model samples each exception 5 times; split-conformal prediction, calibrated on labelled examples, forms a set of likely causes and supports routing. In the reference run, top-answer accuracy was 62/68 and test coverage was 32/34 at a 90% target.
 
-**Layer 2 — verified suggestions:** a fix is applied only when Geocode Premium confirms it; house numbers are never changed. In the reference run, 6/6 suggestions confirmed by Precisely were correct, with 0 incorrect.
+**Layer 2, verified suggestions:** a fix is applied only when Geocode Premium confirms it; house numbers are never changed. In the reference run, 6/6 suggestions confirmed by Precisely were correct, with 0 incorrect.
 
 ## Testing strategy
 
@@ -97,12 +97,12 @@ Unit tests use temporary folders and a temporary credit ledger. After each chang
 
 ## Key design decisions
 
-- **Geocode Premium for verification** — in testing, Address Verification Premium returned Status F, “Address Not Found,” for defective input and still consumed a credit; Geocode Premium corrected defective input and returned a precision code used as the eligibility gate (see [Project Plan, section 7](PROJECT_PLAN.md)).
-- **Enrich only S5/S7/S8** — flood data bought for a street- or ZIP-level location can give the wrong flood zone. The coarse-vs-verified comparison changed the flood-risk tier for 14 of 39 records, and enrichment costs about 8 credits per record, so it is only bought for building-level matches.
-- **Paid execution only from the command line** — provides budget control and human approval for anything that spends money, and keeps API keys out of web pages.
-- **Aggregates only in the public repository** — row-level Precisely results may not be publicly displayed or stored beyond temporary use (Acceptable Use Policy, sections 4.1–4.2); full records are shared privately.
-- **Groq for the AI step** — meets the free-tier requirement, its services agreement prohibits training on inputs and outputs, and Zero Data Retention is enabled. Gemini's free tier was excluded because prompts may be used to improve products.
-- **Local-only app** — the app can show row-level Precisely results, so it binds to localhost and is never deployed; it never reads API keys or calls Precisely or the AI (enforced by a test).
+- **Geocode Premium for verification:** in testing, Address Verification Premium returned Status F, “Address Not Found,” for defective input and still consumed a credit; Geocode Premium corrected defective input and returned a precision code used as the eligibility gate (see [Project Plan, section 7](PROJECT_PLAN.md)).
+- **Enrich only S5/S7/S8:** flood data bought for a street- or ZIP-level location can give the wrong flood zone. The coarse-vs-verified comparison changed the flood-risk tier for 14 of 39 records, and enrichment costs about 8 credits per record, so it is only bought for building-level matches.
+- **Paid execution only from the command line:** provides budget control and human approval for anything that spends money, and keeps API keys out of web pages.
+- **Aggregates only in the public repository:** row-level Precisely results may not be publicly displayed or stored beyond temporary use (Acceptable Use Policy, sections 4.1–4.2); full records are shared privately.
+- **Groq for the AI step:** meets the free-tier requirement, its services agreement prohibits training on inputs and outputs, and Zero Data Retention is enabled. Gemini's free tier was excluded because prompts may be used to improve products.
+- **Local-only app:** the app can show row-level Precisely results, so it binds to localhost and is never deployed; it never reads API keys or calls Precisely or the AI (enforced by a test).
 
 ## Future work
 
