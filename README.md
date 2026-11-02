@@ -184,6 +184,10 @@ A 6-record Excel file with different column names was onboarded in the app and r
 - The AI exception steps reported "not available" cleanly, because there is no labelled sample.
 - 42.02 credits used. The test data was deleted afterwards.
 
+## How this was built
+
+Built with AI coding assistants (GitHub Copilot for implementation; Claude for architecture review and verification). Every change was reviewed, tested and approved by the author; paid API calls always required explicit human approval.
+
 ## Privacy by design
 
 The synthetic dataset contains no person names and uses policy IDs only, following data minimization. Only the needed address fields are sent to Precisely; only the derived fields in the AI allowlist are sent to Groq. In production, personal data stays inside the carrier and records are linked by policy ID. If re-identification is ever needed, use keyed tokenization (HMAC with a secret key or a token vault), not plain hashing: hashes of names can be reversed by dictionary attack and remain personal data.
