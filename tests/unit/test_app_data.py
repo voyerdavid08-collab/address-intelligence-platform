@@ -341,7 +341,7 @@ def test_confirmed_verification_does_not_show_unverified_suggestion_status():
     assert "unverified" not in str(row.values()).casefold()
 
 
-def test_cost_table_display_has_blank_total_inputs_and_precise_small_credits():
+def test_cost_table_display_omits_total_row_and_preserves_precise_small_credits():
     rows = format_cost_breakdown_rows(
         [
             {
@@ -360,11 +360,11 @@ def test_cost_table_display_has_blank_total_inputs_and_precise_small_credits():
             },
         ]
     )
+    assert len(rows) == 1
+    assert rows[0]["Item"] == "PreciselyID"
     assert rows[0]["Calls"] == 21
     assert rows[0]["Credits each"] == pytest.approx(0.01)
     assert rows[0]["Credits"] == pytest.approx(0.21)
-    assert rows[1]["Calls"] is None
-    assert rows[1]["Credits each"] is None
 
 
 def test_real_exception_export_is_guarded_inside_output_root(tmp_path):

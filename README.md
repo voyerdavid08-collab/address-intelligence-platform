@@ -4,6 +4,14 @@ A reusable Python pipeline and local app that verifies, standardises and enriche
 
 The pipeline runs in separate stages, each dry-run first, so every paid call is planned and approved before it is made. A per-client profile controls the input file, column mapping, enrichment items and AI switches, so a new client needs a new profile and their file, not new code.
 
+## Reviewer quick start (5 minutes)
+
+1. Read the [one-page business impact summary](docs/BUSINESS_IMPACT.pdf) (2 minutes).
+2. Scan [Results at a glance](#results-at-a-glance).
+3. Verify without any API keys: `pip install -e ".[dev,app]"` then `pytest` (all tests run offline).
+4. Optional: open the local app in made-up-examples mode: `.venv\Scripts\streamlit run app/streamlit_app.py`, then start on the "Start here" tab (screenshots below in [Local app](#local-app)).
+5. Design and decisions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Business impact summary
 
 - [One-page summary (PDF)](docs/BUSINESS_IMPACT.pdf)
@@ -39,6 +47,24 @@ Aggregates only, from the 200-record synthetic run. Full tables: [reports/before
 - **Reports**: aggregate reports and a workbook.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+
+## Enrichment choices
+
+| Attribute | Why it matters to an underwriter | Decision it enables that a raw address cannot | Coverage in the run | Credits per call |
+| --- | --- | --- | --- | --- |
+| Flood zone and risk level | Flood exposure drives pricing and required coverage | Rate each policy on its actual building, not a ZIP or city average | 170/170 verified | 5 |
+| Base flood elevation | Expected flood height in high-risk zones | Refine premium and mitigation advice where risk is high | 56/170 (only exists in high-risk zones) | included in flood call |
+| Distance to flood hazard | Proximity risk even outside a mapped zone | Flag near-zone policies a zone label alone would miss | 170/170 | 2 |
+| Year built | Building age and codes affect vulnerability | Adjust risk for older construction | 13/170 (where available) | 1 |
+| PreciselyID | A permanent identifier for the location | Link policies, claims and future data to the same place over time | 39/170 (exact address points) | 0.01 |
+
+Enrichment is bought only for addresses verified to the building (S5/S7/S8): a coarse location changed the flood-risk tier for 14 of 39 compared records.
+
+### Deliberately not used
+
+Neighbourhood demographics and crime: a fairness and proxy-discrimination risk in insurance pricing.
+
+Distance to fire station (6 credits per call) and fire risk (9 credits per call): not justified for this flood-focused scenario on a trial budget.
 
 ## Setup
 
@@ -110,6 +136,24 @@ Open http://localhost:8501. The app is local only and must not be deployed.
 - **4 Client results**: a summary for leadership and a work list for operations.
 
 Made-up examples are safe to share; real results stay on this computer. The app never calls Precisely or the AI. Paid runs stay on the command line behind `--execute` for three reasons: budget control, human approval for anything that spends money, and keeping API keys out of web pages.
+
+### Screenshots (made-up examples)
+
+![Start here](docs/images/app_start_here.png)
+
+Start here: purpose, data safety and a 60-second walkthrough.
+
+![Pre-flight check](docs/images/app_preflight.png)
+
+Pre-flight: a free check of the client file, grouped by who fixes what.
+
+![Cost and plan](docs/images/app_cost_plan.png)
+
+Cost & plan: 300,000 policies at 100% verified, about $27,030 at list price.
+
+![Client results](docs/images/app_client_results.png)
+
+Client results: aggregate results and the work list (made-up examples).
 
 ## Outputs
 
@@ -202,8 +246,11 @@ Groq was selected for the brief's free-tier requirement (free plan, $0). Its Ser
 
 ### Next
 
-- Verified AI fix suggestions for new clients before calibration (safe because Precisely re-verifies each one; all routed to an analyst).
-- A client labelling step to switch on calibrated confidence and automatic routing.
+- **Learning loop for new clients.** Today, a new client without labelled history gets no AI help on problem addresses until a calibration sample exists. The learning loop removes that wait:
+  - Value from day one: the AI suggests a fix for each problem address and Precisely confirms it before it is shown, so analysts start from a verified suggestion instead of researching from scratch. It is safe from the first record, because nothing changes unless Precisely confirms it.
+  - No separate labelling project: each exception an analyst resolves records its true cause, so the client's own calibration set builds up as a by-product of normal work.
+  - Faster path to automation: after about 30–70 resolved exceptions, confidence is calibrated on the client's own data and the client moves to the full process: automatic routing (for example, missing house numbers straight to customer outreach) with fewer manual touches. In the reference run, the full process resolved about 3 in 4 flawed addresses without manual research.
+  - Trust built in: every automatic decision is backed by a measured confidence level on the client's own data, and every applied fix by Precisely.
 - Per-client credit attribution in the ledger.
 
 ### Later

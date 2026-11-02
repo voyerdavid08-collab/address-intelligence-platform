@@ -811,17 +811,19 @@ with cost_tab:
             ],
             columns=3,
         )
+        display_rows = format_cost_breakdown_rows(breakdown["rows"])
         st.dataframe(
-            format_cost_breakdown_rows(breakdown["rows"]),
+            display_rows,
             width="stretch",
             hide_index=True,
-            height=36 * (len(breakdown["rows"]) + 1) + 4,
+            height=36 * (len(display_rows) + 1) + 4,
             column_config={
                 "Calls": st.column_config.NumberColumn("Calls", format="%,d"),
                 "Credits each": st.column_config.NumberColumn("Credits each", format="%.2f"),
                 "Credits": st.column_config.NumberColumn("Credits", format="localized"),
             },
         )
+        st.markdown(f"**Total: {credit_total} credits**")
         st.caption(_average_credits_formula(breakdown["enabled_item_rate"]))
         st.caption("Calls are rounded to whole records; at full-book volumes the rounding is negligible.")
         st.caption(
@@ -871,7 +873,7 @@ with results_tab:
 
     st.subheader("Exceptions", anchor=False)
     st.write(
-        "Work list for the client's operations team: what to fix, who does it (customer outreach or analyst review), and whether Precisely confirmed an AI fix."
+        "Work list for whoever maintains the client's address data: what to fix, who does it (customer outreach or analyst review), and whether Precisely confirmed an AI fix."
     )
     display_mode = st.radio(
         "Show:",

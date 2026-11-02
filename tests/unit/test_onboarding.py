@@ -593,6 +593,8 @@ def test_cost_breakdown_prices_whole_calls_and_total_matches_displayed_rows():
     precisely_id = next(row for row in item_rows if row["Item"] == "PreciselyID")
     assert precisely_id["Calls"] == 21
     assert precisely_id["Credits"] == Decimal("0.21")
+    streamlit_source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
+    assert 'st.markdown(f"**Total: {credit_total} credits**")' in streamlit_source
 
 
 def test_results_chart_spec_uses_full_names_integer_ticks_and_title():
@@ -872,6 +874,10 @@ def test_demo_banner_is_rendered_after_measured_kpis():
     assert results_tab.index(
         "_display_kpis(summary_path)"
     ) < results_tab.index('st.subheader("Exceptions", anchor=False)')
+    assert (
+        "Work list for whoever maintains the client's address data: what to fix, who does it "
+        "(customer outreach or analyst review), and whether Precisely confirmed an AI fix."
+    ) in results_tab
     assert results_tab.index('st.subheader("Exceptions", anchor=False)') < results_tab.index(
         'if demo_mode:'
     ) < results_tab.index('st.info("Made-up example data, not Precisely output.")')

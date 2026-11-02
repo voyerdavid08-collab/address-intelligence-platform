@@ -110,6 +110,17 @@ The README roadmap lists verified AI fix suggestions for new clients before cali
 
 Calibrated confidence needs the client's own labels because conformal prediction assumes calibration data comes from the same distribution as new data. Fix suggestions can be offered before calibration because Precisely verifies each suggestion; those records remain routed to an analyst.
 
+The [README roadmap](../README.md#roadmap) describes the learning loop's value for new clients.
+
+### Learning loop (technical outline)
+
+1. Add an uncalibrated mode to remediation: request a fix and Precisely verification for every exception, skip confidence and routing, route all exceptions to analyst review, and keep house numbers protected.
+2. Add a "True cause" column to the work list and app, saved per client in `data/clients/<folder>/labels.csv`.
+3. Add a readiness check that runs the existing split-conformal calibration on the client's labels once at least 30 exist, reusing `evaluation.ground_truth_path`.
+4. Mark the client as calibrated in the profile so the existing full process runs.
+
+Re-calibrate periodically as client data changes.
+
 ## Deployment
 
 The onboarding, pre-flight and cost tabs are pre-sales tools for a Solutions Architect. In production, the Client results view (summary for leadership, work list for operations) and the paid pipeline run in the client's own environment, behind approval, with API keys in a secrets vault.

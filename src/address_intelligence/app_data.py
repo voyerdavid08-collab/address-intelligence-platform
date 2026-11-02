@@ -297,6 +297,8 @@ def format_cost_breakdown_rows(
 ) -> list[dict[str, Any]]:
     formatted = []
     for row in rows:
+        if row["Item"] == "Total":
+            continue
         credits_each = row.get("Credits each", "")
         formatted.append(
             {
