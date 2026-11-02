@@ -335,7 +335,7 @@ if "results_mode" not in st.session_state:
     st.session_state.results_mode = "Made-up examples (safe to share)"
 real_mode = st.session_state.results_mode == "Real results on this computer"
 app_ui.apply_styles(real_mode=real_mode)
-app_ui.render_header(real_mode=real_mode)
+app_ui.render_header()
 
 start_tab, onboard_tab, preflight_tab, cost_tab, results_tab = st.tabs(
     [

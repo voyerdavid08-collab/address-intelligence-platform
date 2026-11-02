@@ -86,14 +86,11 @@ def real_mode_compliance_css(real_mode: bool) -> str:
 def apply_styles(*, real_mode: bool = False) -> None:
     """Apply the shared visual system, adding stricter table controls in real mode."""
     st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
-    compliance_css = real_mode_compliance_css(real_mode)
-    if compliance_css:
-        st.markdown(compliance_css, unsafe_allow_html=True)
+    compliance_css = real_mode_compliance_css(real_mode) or "<style></style>"
+    st.markdown(compliance_css, unsafe_allow_html=True)
 
 
-def render_header(*, real_mode: bool) -> None:
-    mode = "Local · Real results" if real_mode else "Local · Made-up examples"
-    mode_class = "real" if real_mode else "sample"
+def render_header() -> None:
     st.markdown(
         f"""
         <div class="ai-header">
@@ -101,7 +98,7 @@ def render_header(*, real_mode: bool) -> None:
             <div class="ai-brand">Address Intelligence</div>
             <div class="ai-subtitle">Client onboarding and assessment</div>
           </div>
-          <div class="ai-mode ai-mode-{mode_class}">{escape(mode)}</div>
+          <div class="ai-mode">{escape("Local only")}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -118,10 +115,8 @@ def render_header(*, real_mode: bool) -> None:
         .ai-subtitle {{ margin-top:4px; color:#D5DFEA; font-size:14px; }}
         .ai-mode {{
           border-radius:999px; padding:8px 13px; font-weight:600; font-size:13px;
-          white-space:nowrap; color:{COLORS["navy"]};
+          white-space:nowrap; color:{COLORS["navy"]}; background:#E7EEF5;
         }}
-        .ai-mode-sample {{ background:#E7EEF5; }}
-        .ai-mode-real {{ background:#FFF0CC; color:#67420C; }}
         .ai-tab-title {{ margin:8px 0 4px; font-size:24px; color:{COLORS["navy"]}; font-weight:700; }}
         .ai-purpose {{ margin:0 0 18px; color:{COLORS["muted"]}; font-size:14px; }}
         .ai-journey-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }}

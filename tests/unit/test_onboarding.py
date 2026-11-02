@@ -863,6 +863,43 @@ def test_visual_tokens_and_real_mode_compliance_css():
     assert app_ui.FONT_STACK.split(",")[0].strip('"') in config
 
 
+def test_apply_styles_renders_same_markdown_count_in_each_mode(monkeypatch):
+    markdown_calls = []
+    monkeypatch.setattr(
+        app_ui.st,
+        "markdown",
+        lambda body, **kwargs: markdown_calls.append(body),
+    )
+
+    app_ui.apply_styles(real_mode=True)
+    real_mode_count = len(markdown_calls)
+    real_mode_compliance = markdown_calls[-1]
+
+    markdown_calls.clear()
+    app_ui.apply_styles(real_mode=False)
+
+    assert len(markdown_calls) == real_mode_count
+    assert real_mode_compliance == app_ui.real_mode_compliance_css(True)
+    assert markdown_calls[-1] == "<style></style>"
+
+
+def test_header_pill_is_neutral_and_mode_independent(monkeypatch):
+    markdown_calls = []
+    monkeypatch.setattr(
+        app_ui.st,
+        "markdown",
+        lambda body, **kwargs: markdown_calls.append(body),
+    )
+
+    app_ui.render_header()
+
+    header_html = markdown_calls[0]
+    assert '<div class="ai-mode">Local only</div>' in header_html
+    assert "Made-up examples" not in header_html
+    assert "Real results" not in header_html
+    assert "ai-mode-real" not in markdown_calls[1]
+
+
 def test_demo_banner_is_rendered_after_measured_kpis():
     source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
     results_tab = source[source.index("with results_tab:"):]
