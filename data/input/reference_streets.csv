@@ -1,0 +1,43 @@
+street_id,street_name,city,state,zip5,house_number_min,house_number_max,metro,selection_note
+HOU-01,Westheimer Rd,Houston,TX,77098,2000,2198,Houston TX,major arterial; inland
+HOU-02,Kirby Dr,Houston,TX,77019,1800,1998,Houston TX,major corridor; inland control
+HOU-03,Richmond Ave,Houston,TX,77098,2000,2198,Houston TX,major arterial; near bayou
+HOU-04,Bissonnet St,Houston,TX,77005,2000,2198,Houston TX,major corridor; mixed exposure
+HOU-05,N Shepherd Dr,Houston,TX,77008,1000,1198,Houston TX,major arterial; near bayou
+HOU-06,Allen Pkwy,Houston,TX,77019,2000,2198,Houston TX,parkway; near bayou
+HOU-07,Telephone Rd,Houston,TX,77023,2000,2198,Houston TX,inland control
+NOL-01,St Charles Ave,New Orleans,LA,70130,1000,1198,New Orleans LA,major avenue; near river
+NOL-02,Magazine St,New Orleans,LA,70130,1000,1198,New Orleans LA,major corridor; near river
+NOL-03,Canal St,New Orleans,LA,70112,1000,1198,New Orleans LA,major arterial; low elevation
+NOL-04,S Claiborne Ave,New Orleans,LA,70125,1000,1198,New Orleans LA,major arterial; near drainage
+NOL-05,S Carrollton Ave,New Orleans,LA,70118,1000,1198,New Orleans LA,major corridor; inland control
+NOL-06,Gentilly Blvd,New Orleans,LA,70122,3000,3198,New Orleans LA,major boulevard; low elevation
+NOL-07,Napoleon Ave,New Orleans,LA,70115,1000,1198,New Orleans LA,major avenue; near river
+MIA-01,Biscayne Blvd,Miami,FL,33132,1000,1198,Miami-Miami Beach FL,major coastal arterial
+MIA-02,W Flagler St,Miami,FL,33130,1000,1198,Miami-Miami Beach FL,major downtown corridor
+MIA-03,Coral Way,Miami,FL,33134,1000,1198,Miami-Miami Beach FL,major inland corridor
+MIA-04,SW 8th St,Miami,FL,33130,1000,1198,Miami-Miami Beach FL,major arterial; inland
+MIA-05,Collins Ave,Miami Beach,FL,33139,1000,1198,Miami-Miami Beach FL,coastal corridor
+MIA-06,Alton Rd,Miami Beach,FL,33139,1000,1198,Miami-Miami Beach FL,bayside corridor
+MIA-07,Washington Ave,Miami Beach,FL,33139,1000,1198,Miami-Miami Beach FL,coastal barrier island
+TPA-01,Bayshore Blvd,Tampa,FL,33606,1000,1198,Tampa-St Petersburg FL,bayside corridor
+TPA-02,W Kennedy Blvd,Tampa,FL,33606,1000,1198,Tampa-St Petersburg FL,major arterial; near bay
+TPA-03,S Dale Mabry Hwy,Tampa,FL,33629,3000,3198,Tampa-St Petersburg FL,major inland corridor
+TPA-04,N Nebraska Ave,Tampa,FL,33602,1000,1198,Tampa-St Petersburg FL,major inland arterial
+TPA-05,Central Ave,St Petersburg,FL,33705,1000,1198,Tampa-St Petersburg FL,major downtown corridor
+TPA-06,4th St N,St Petersburg,FL,33701,1000,1198,Tampa-St Petersburg FL,major inland arterial
+TPA-07,1st Ave N,St Petersburg,FL,33705,1000,1198,Tampa-St Petersburg FL,downtown corridor
+CHS-01,King St,Charleston,SC,29401,300,398,Charleston SC,major downtown corridor
+CHS-02,Meeting St,Charleston,SC,29401,100,198,Charleston SC,major downtown arterial
+CHS-03,East Bay St,Charleston,SC,29401,100,198,Charleston SC,waterfront corridor
+CHS-04,Calhoun St,Charleston,SC,29401,100,198,Charleston SC,major downtown corridor
+CHS-05,Broad St,Charleston,SC,29401,100,198,Charleston SC,low-lying downtown corridor
+CHS-06,Savannah Hwy,Charleston,SC,29414,3000,3198,Charleston SC,major inland corridor
+CHS-07,Folly Rd,Charleston,SC,29412,2000,2198,Charleston SC,coastal approach corridor
+BOU-01,Broadway,Boulder,CO,80302,1000,1198,Boulder CO,riverine corridor
+BOU-02,Pearl St,Boulder,CO,80302,1000,1198,Boulder CO,downtown; near creek
+BOU-03,Arapahoe Ave,Boulder,CO,80302,1000,1198,Boulder CO,riverine corridor
+BOU-04,Canyon Blvd,Boulder,CO,80302,1000,1198,Boulder CO,near creek
+BOU-05,Spruce St,Boulder,CO,80302,1000,1198,Boulder CO,downtown; inland
+BOU-06,28th St,Boulder,CO,80303,1000,1198,Boulder CO,major inland arterial
+BOU-07,Baseline Rd,Boulder,CO,80302,1000,1198,Boulder CO,inland control

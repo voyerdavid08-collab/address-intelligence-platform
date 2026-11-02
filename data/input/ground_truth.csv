@@ -1,0 +1,201 @@
+policy_id,clean_address_line1,clean_address_line2,clean_city,clean_state,clean_zip5,street_id,defects,defect_count,expected_outcome
+POL-000001,1141 Napoleon Ave,Apt 3,New Orleans,LA,70115,NOL-07,street_typo,1,correctable
+POL-000002,1123 W Kennedy Blvd,,Tampa,FL,33606,TPA-02,,0,correctable
+POL-000003,3112 Gentilly Blvd,,New Orleans,LA,70122,NOL-06,missing_zip,1,correctable
+POL-000004,1014 Canal St,,New Orleans,LA,70112,NOL-03,missing_zip,1,correctable
+POL-000005,1151 Bayshore Blvd,,Tampa,FL,33606,TPA-01,,0,correctable
+POL-000006,3084 Gentilly Blvd,,New Orleans,LA,70122,NOL-06,,0,correctable
+POL-000007,1179 S Carrollton Ave,,New Orleans,LA,70118,NOL-05,,0,correctable
+POL-000008,1118 Canyon Blvd,,Boulder,CO,80302,BOU-04,,0,correctable
+POL-000009,1194 Napoleon Ave,,New Orleans,LA,70115,NOL-07,,0,correctable
+POL-000010,367 King St,,Charleston,SC,29401,CHS-01,,0,correctable
+POL-000011,163 East Bay St,,Charleston,SC,29401,CHS-03,,0,correctable
+POL-000012,1026 Coral Way,,Miami,FL,33134,MIA-03,,0,correctable
+POL-000013,1140 Coral Way,,Miami,FL,33134,MIA-03,,0,correctable
+POL-000014,1053 Canal St,,New Orleans,LA,70112,NOL-03,,0,correctable
+POL-000015,1045 N Shepherd Dr,,Houston,TX,77008,HOU-05,city_typo;missing_zip,2,correctable
+POL-000016,1068 4th St N,,St Petersburg,FL,33701,TPA-06,,0,correctable
+POL-000017,125 Broad St,,Charleston,SC,29401,CHS-05,missing_house_number,1,manual_review
+POL-000018,1842 Kirby Dr,,Houston,TX,77019,HOU-02,,0,correctable
+POL-000019,1059 Baseline Rd,,Boulder,CO,80302,BOU-07,,0,correctable
+POL-000020,1015 1st Ave N,Apt 2B,St Petersburg,FL,33705,TPA-07,street_typo;missing_unit,2,not_detectable
+POL-000021,109 East Bay St,,Charleston,SC,29401,CHS-03,,0,correctable
+POL-000022,1026 N Nebraska Ave,,Tampa,FL,33602,TPA-04,,0,correctable
+POL-000023,1043 SW 8th St,,Miami,FL,33130,MIA-04,missing_house_number,1,manual_review
+POL-000024,2175 Telephone Rd,,Houston,TX,77023,HOU-07,,0,correctable
+POL-000025,1104 Canal St,,New Orleans,LA,70112,NOL-03,,0,correctable
+POL-000026,1026 W Flagler St,,Miami,FL,33130,MIA-02,missing_house_number,1,manual_review
+POL-000027,2120 Richmond Ave,,Houston,TX,77098,HOU-03,,0,correctable
+POL-000028,1139 Washington Ave,,Miami Beach,FL,33139,MIA-07,,0,correctable
+POL-000029,2047 Telephone Rd,,Houston,TX,77023,HOU-07,street_typo,1,correctable
+POL-000030,1176 28th St,,Boulder,CO,80303,BOU-06,city_typo,1,correctable
+POL-000031,1165 1st Ave N,,St Petersburg,FL,33705,TPA-07,,0,correctable
+POL-000032,1088 St Charles Ave,,New Orleans,LA,70130,NOL-01,,0,correctable
+POL-000033,1054 St Charles Ave,,New Orleans,LA,70130,NOL-01,,0,correctable
+POL-000034,1193 W Flagler St,,Miami,FL,33130,MIA-02,,0,correctable
+POL-000035,1133 Alton Rd,,Miami Beach,FL,33139,MIA-06,nonexistent_address,1,unresolvable
+POL-000036,1061 Central Ave,,St Petersburg,FL,33705,TPA-05,,0,correctable
+POL-000037,1143 N Shepherd Dr,,Houston,TX,77008,HOU-05,,0,correctable
+POL-000038,2041 Folly Rd,,Charleston,SC,29412,CHS-07,,0,correctable
+POL-000039,168 Broad St,,Charleston,SC,29401,CHS-05,,0,correctable
+POL-000040,146 Meeting St,,Charleston,SC,29401,CHS-02,,0,correctable
+POL-000041,1097 SW 8th St,,Miami,FL,33130,MIA-04,street_typo,1,correctable
+POL-000042,1160 Spruce St,,Boulder,CO,80302,BOU-05,,0,correctable
+POL-000043,2015 Allen Pkwy,,Houston,TX,77019,HOU-06,city_typo;wrong_zip,2,to_be_measured
+POL-000044,1016 S Carrollton Ave,,New Orleans,LA,70118,NOL-05,,0,correctable
+POL-000045,1143 Collins Ave,,Miami Beach,FL,33139,MIA-05,,0,correctable
+POL-000046,2069 Bissonnet St,,Houston,TX,77005,HOU-04,,0,correctable
+POL-000047,1039 Washington Ave,Unit 2A,Miami Beach,FL,33139,MIA-07,,0,correctable
+POL-000048,1183 Bayshore Blvd,,Tampa,FL,33606,TPA-01,,0,correctable
+POL-000049,2160 Richmond Ave,,Houston,TX,77098,HOU-03,,0,correctable
+POL-000050,1164 Broadway,,Boulder,CO,80302,BOU-01,,0,correctable
+POL-000051,1057 SW 8th St,,Miami,FL,33130,MIA-04,,0,correctable
+POL-000052,153 Meeting St,,Charleston,SC,29401,CHS-02,city_typo,1,correctable
+POL-000053,2098 Telephone Rd,,Houston,TX,77023,HOU-07,,0,correctable
+POL-000054,1131 St Charles Ave,Apt 3,New Orleans,LA,70130,NOL-01,,0,correctable
+POL-000055,1059 28th St,,Boulder,CO,80303,BOU-06,,0,correctable
+POL-000056,1032 Spruce St,,Boulder,CO,80302,BOU-05,,0,correctable
+POL-000057,1188 Biscayne Blvd,Apt 2B,Miami,FL,33132,MIA-01,missing_unit,1,not_detectable
+POL-000058,2037 Folly Rd,,Charleston,SC,29412,CHS-07,,0,correctable
+POL-000059,368 King St,,Charleston,SC,29401,CHS-01,missing_zip,1,correctable
+POL-000060,1161 1st Ave N,,St Petersburg,FL,33705,TPA-07,missing_zip,1,correctable
+POL-000061,2181 Westheimer Rd,,Houston,TX,77098,HOU-01,nonexistent_address,1,unresolvable
+POL-000062,1189 Collins Ave,Unit 4,Miami Beach,FL,33139,MIA-05,missing_zip,1,correctable
+POL-000063,1056 Canyon Blvd,,Boulder,CO,80302,BOU-04,,0,correctable
+POL-000064,1067 W Flagler St,Unit 4,Miami,FL,33130,MIA-02,city_typo,1,correctable
+POL-000065,161 Calhoun St,,Charleston,SC,29401,CHS-04,street_typo,1,correctable
+POL-000066,1019 Pearl St,,Boulder,CO,80302,BOU-02,,0,correctable
+POL-000067,1177 Canyon Blvd,,Boulder,CO,80302,BOU-04,missing_zip,1,correctable
+POL-000068,1005 Collins Ave,,Miami Beach,FL,33139,MIA-05,,0,correctable
+POL-000069,1142 N Nebraska Ave,,Tampa,FL,33602,TPA-04,,0,correctable
+POL-000070,1027 Bayshore Blvd,,Tampa,FL,33606,TPA-01,missing_zip,1,correctable
+POL-000071,3100 S Dale Mabry Hwy,,Tampa,FL,33629,TPA-03,,0,correctable
+POL-000072,1145 Coral Way,Apt 2B,Miami,FL,33134,MIA-03,street_typo;missing_unit,2,not_detectable
+POL-000073,1109 4th St N,,St Petersburg,FL,33701,TPA-06,nonexistent_address,1,unresolvable
+POL-000074,1192 4th St N,,St Petersburg,FL,33701,TPA-06,nonexistent_address,1,unresolvable
+POL-000075,2106 Westheimer Rd,Unit 2A,Houston,TX,77098,HOU-01,,0,correctable
+POL-000076,1035 S Carrollton Ave,Apt 3,New Orleans,LA,70118,NOL-05,,0,correctable
+POL-000077,177 Calhoun St,,Charleston,SC,29401,CHS-04,,0,correctable
+POL-000078,2046 Folly Rd,,Charleston,SC,29412,CHS-07,,0,correctable
+POL-000079,1173 Arapahoe Ave,,Boulder,CO,80302,BOU-03,,0,correctable
+POL-000080,3197 Savannah Hwy,,Charleston,SC,29414,CHS-06,,0,correctable
+POL-000081,1141 Pearl St,Apt 2B,Boulder,CO,80302,BOU-02,,0,correctable
+POL-000082,1170 Napoleon Ave,,New Orleans,LA,70115,NOL-07,street_typo,1,correctable
+POL-000083,1110 Broadway,,Boulder,CO,80302,BOU-01,,0,correctable
+POL-000084,2013 Richmond Ave,,Houston,TX,77098,HOU-03,,0,correctable
+POL-000085,1028 Magazine St,,New Orleans,LA,70130,NOL-02,,0,correctable
+POL-000086,1831 Kirby Dr,,Houston,TX,77019,HOU-02,,0,correctable
+POL-000087,2179 Richmond Ave,,Houston,TX,77098,HOU-03,,0,correctable
+POL-000088,2077 Telephone Rd,,Houston,TX,77023,HOU-07,street_typo,1,correctable
+POL-000089,1144 Central Ave,,St Petersburg,FL,33705,TPA-05,city_typo;wrong_zip,2,to_be_measured
+POL-000090,1014 N Shepherd Dr,,Houston,TX,77008,HOU-05,street_typo;missing_zip,2,correctable
+POL-000091,1080 Baseline Rd,,Boulder,CO,80302,BOU-07,street_typo,1,correctable
+POL-000092,1074 Bayshore Blvd,,Tampa,FL,33606,TPA-01,,0,correctable
+POL-000093,1037 Biscayne Blvd,,Miami,FL,33132,MIA-01,,0,correctable
+POL-000094,1167 Coral Way,,Miami,FL,33134,MIA-03,missing_house_number,1,manual_review
+POL-000095,3100 Gentilly Blvd,,New Orleans,LA,70122,NOL-06,,0,correctable
+POL-000096,1180 S Claiborne Ave,,New Orleans,LA,70125,NOL-04,,0,correctable
+POL-000097,3129 S Dale Mabry Hwy,,Tampa,FL,33629,TPA-03,,0,correctable
+POL-000098,1162 Central Ave,,St Petersburg,FL,33705,TPA-05,nonexistent_address,1,unresolvable
+POL-000099,190 East Bay St,,Charleston,SC,29401,CHS-03,missing_house_number,1,manual_review
+POL-000100,1114 Alton Rd,,Miami Beach,FL,33139,MIA-06,,0,correctable
+POL-000101,1118 W Kennedy Blvd,,Tampa,FL,33606,TPA-02,missing_house_number,1,manual_review
+POL-000102,1110 N Nebraska Ave,,Tampa,FL,33602,TPA-04,,0,correctable
+POL-000103,1059 Alton Rd,,Miami Beach,FL,33139,MIA-06,,0,correctable
+POL-000104,1070 Washington Ave,Unit 2A,Miami Beach,FL,33139,MIA-07,missing_unit,1,not_detectable
+POL-000105,1025 Biscayne Blvd,,Miami,FL,33132,MIA-01,missing_zip,1,correctable
+POL-000106,1161 S Carrollton Ave,,New Orleans,LA,70118,NOL-05,nonexistent_address,1,unresolvable
+POL-000107,1020 N Shepherd Dr,Unit 4,Houston,TX,77008,HOU-05,missing_unit,1,not_detectable
+POL-000108,1161 Broadway,,Boulder,CO,80302,BOU-01,,0,correctable
+POL-000109,2010 Telephone Rd,,Houston,TX,77023,HOU-07,,0,correctable
+POL-000110,314 King St,Unit 2A,Charleston,SC,29401,CHS-01,wrong_zip,1,to_be_measured
+POL-000111,1138 Pearl St,,Boulder,CO,80302,BOU-02,,0,correctable
+POL-000112,2014 Bissonnet St,,Houston,TX,77005,HOU-04,,0,correctable
+POL-000113,1977 Kirby Dr,,Houston,TX,77019,HOU-02,,0,correctable
+POL-000114,2160 Bissonnet St,Apt 3,Houston,TX,77005,HOU-04,,0,correctable
+POL-000115,1170 Biscayne Blvd,,Miami,FL,33132,MIA-01,street_typo,1,correctable
+POL-000116,1156 Magazine St,Apt 3,New Orleans,LA,70130,NOL-02,missing_unit,1,not_detectable
+POL-000117,1146 Biscayne Blvd,,Miami,FL,33132,MIA-01,missing_house_number,1,manual_review
+POL-000118,1005 1st Ave N,,St Petersburg,FL,33705,TPA-07,,0,correctable
+POL-000119,1873 Kirby Dr,,Houston,TX,77019,HOU-02,,0,correctable
+POL-000120,2161 Westheimer Rd,,Houston,TX,77098,HOU-01,,0,correctable
+POL-000121,1170 Spruce St,,Boulder,CO,80302,BOU-05,,0,correctable
+POL-000122,3190 Savannah Hwy,Unit 4,Charleston,SC,29414,CHS-06,,0,correctable
+POL-000123,1077 W Flagler St,,Miami,FL,33130,MIA-02,wrong_zip,1,to_be_measured
+POL-000124,1132 Napoleon Ave,,New Orleans,LA,70115,NOL-07,,0,correctable
+POL-000125,1170 Collins Ave,,Miami Beach,FL,33139,MIA-05,,0,correctable
+POL-000126,147 Meeting St,Unit 2A,Charleston,SC,29401,CHS-02,missing_unit,1,not_detectable
+POL-000127,1152 Central Ave,,St Petersburg,FL,33705,TPA-05,city_typo,1,correctable
+POL-000128,1080 Spruce St,Apt 2B,Boulder,CO,80302,BOU-05,city_typo,1,correctable
+POL-000129,1013 S Carrollton Ave,,New Orleans,LA,70118,NOL-05,,0,correctable
+POL-000130,3053 S Dale Mabry Hwy,,Tampa,FL,33629,TPA-03,,0,correctable
+POL-000131,1188 S Claiborne Ave,,New Orleans,LA,70125,NOL-04,street_typo,1,correctable
+POL-000132,1933 Kirby Dr,,Houston,TX,77019,HOU-02,,0,correctable
+POL-000133,181 Calhoun St,,Charleston,SC,29401,CHS-04,city_typo,1,correctable
+POL-000134,1052 Magazine St,,New Orleans,LA,70130,NOL-02,,0,correctable
+POL-000135,1137 28th St,,Boulder,CO,80303,BOU-06,,0,correctable
+POL-000136,169 Broad St,,Charleston,SC,29401,CHS-05,,0,correctable
+POL-000137,2048 Westheimer Rd,,Houston,TX,77098,HOU-01,missing_zip,1,correctable
+POL-000138,1041 Broadway,Unit 2A,Boulder,CO,80302,BOU-01,missing_house_number,1,manual_review
+POL-000139,1105 Collins Ave,,Miami Beach,FL,33139,MIA-05,,0,correctable
+POL-000140,145 Calhoun St,,Charleston,SC,29401,CHS-04,,0,correctable
+POL-000141,2002 Allen Pkwy,,Houston,TX,77019,HOU-06,,0,correctable
+POL-000142,1158 S Claiborne Ave,Apt 2B,New Orleans,LA,70125,NOL-04,missing_house_number,1,manual_review
+POL-000143,1147 Baseline Rd,,Boulder,CO,80302,BOU-07,wrong_zip,1,to_be_measured
+POL-000144,2140 Bissonnet St,,Houston,TX,77005,HOU-04,,0,correctable
+POL-000145,1089 W Kennedy Blvd,,Tampa,FL,33606,TPA-02,street_typo;city_typo,2,correctable
+POL-000146,1126 Alton Rd,,Miami Beach,FL,33139,MIA-06,,0,correctable
+POL-000147,1019 Arapahoe Ave,,Boulder,CO,80302,BOU-03,street_typo;city_typo,2,correctable
+POL-000148,129 East Bay St,,Charleston,SC,29401,CHS-03,,0,correctable
+POL-000149,1143 Napoleon Ave,,New Orleans,LA,70115,NOL-07,street_typo,1,correctable
+POL-000150,3145 Gentilly Blvd,,New Orleans,LA,70122,NOL-06,,0,correctable
+POL-000151,1016 Washington Ave,,Miami Beach,FL,33139,MIA-07,,0,correctable
+POL-000152,3084 Savannah Hwy,,Charleston,SC,29414,CHS-06,missing_zip,1,correctable
+POL-000153,1111 W Kennedy Blvd,,Tampa,FL,33606,TPA-02,,0,correctable
+POL-000154,170 Broad St,,Charleston,SC,29401,CHS-05,,0,correctable
+POL-000155,1029 28th St,,Boulder,CO,80303,BOU-06,missing_house_number,1,manual_review
+POL-000156,3151 Gentilly Blvd,,New Orleans,LA,70122,NOL-06,,0,correctable
+POL-000157,2163 Allen Pkwy,,Houston,TX,77019,HOU-06,,0,correctable
+POL-000158,1133 Pearl St,Unit 4,Boulder,CO,80302,BOU-02,,0,correctable
+POL-000159,2069 Allen Pkwy,,Houston,TX,77019,HOU-06,,0,correctable
+POL-000160,1168 Central Ave,,St Petersburg,FL,33705,TPA-05,,0,correctable
+POL-000161,149 Calhoun St,,Charleston,SC,29401,CHS-04,,0,correctable
+POL-000162,2000 Bissonnet St,Unit 2A,Houston,TX,77005,HOU-04,,0,correctable
+POL-000163,1019 St Charles Ave,Unit 4,New Orleans,LA,70130,NOL-01,nonexistent_address,1,unresolvable
+POL-000164,1017 Baseline Rd,,Boulder,CO,80302,BOU-07,street_typo,1,correctable
+POL-000165,1025 Canal St,,New Orleans,LA,70112,NOL-03,,0,correctable
+POL-000166,1181 SW 8th St,Apt 2B,Miami,FL,33130,MIA-04,missing_unit,1,not_detectable
+POL-000167,398 King St,Unit 4,Charleston,SC,29401,CHS-01,missing_unit,1,not_detectable
+POL-000168,1001 Magazine St,,New Orleans,LA,70130,NOL-02,,0,correctable
+POL-000169,196 Meeting St,,Charleston,SC,29401,CHS-02,missing_zip,1,correctable
+POL-000170,377 King St,,Charleston,SC,29401,CHS-01,street_typo,1,correctable
+POL-000171,1102 Canyon Blvd,,Boulder,CO,80302,BOU-04,,0,correctable
+POL-000172,1097 Bayshore Blvd,,Tampa,FL,33606,TPA-01,,0,correctable
+POL-000173,1084 Washington Ave,,Miami Beach,FL,33139,MIA-07,,0,correctable
+POL-000174,1042 4th St N,,St Petersburg,FL,33701,TPA-06,wrong_zip,1,to_be_measured
+POL-000175,3049 S Dale Mabry Hwy,,Tampa,FL,33629,TPA-03,,0,correctable
+POL-000176,1107 Magazine St,Unit 2A,New Orleans,LA,70130,NOL-02,wrong_zip,1,to_be_measured
+POL-000177,3081 S Dale Mabry Hwy,,Tampa,FL,33629,TPA-03,wrong_zip,1,to_be_measured
+POL-000178,2161 Folly Rd,,Charleston,SC,29412,CHS-07,,0,correctable
+POL-000179,2081 Richmond Ave,Apt 3,Houston,TX,77098,HOU-03,city_typo;missing_zip,2,correctable
+POL-000180,1112 SW 8th St,,Miami,FL,33130,MIA-04,street_typo;missing_zip,2,correctable
+POL-000181,2043 Westheimer Rd,Unit 4,Houston,TX,77098,HOU-01,street_typo,1,correctable
+POL-000182,1065 Alton Rd,,Miami Beach,FL,33139,MIA-06,,0,correctable
+POL-000183,1045 Arapahoe Ave,,Boulder,CO,80302,BOU-03,,0,correctable
+POL-000184,1144 N Nebraska Ave,,Tampa,FL,33602,TPA-04,,0,correctable
+POL-000185,1191 S Claiborne Ave,,New Orleans,LA,70125,NOL-04,missing_zip,1,correctable
+POL-000186,1084 1st Ave N,,St Petersburg,FL,33705,TPA-07,,0,correctable
+POL-000187,1156 W Kennedy Blvd,,Tampa,FL,33606,TPA-02,,0,correctable
+POL-000188,1009 N Nebraska Ave,,Tampa,FL,33602,TPA-04,,0,correctable
+POL-000189,1064 Canal St,,New Orleans,LA,70112,NOL-03,,0,correctable
+POL-000190,1047 4th St N,,St Petersburg,FL,33701,TPA-06,,0,correctable
+POL-000191,1148 St Charles Ave,,New Orleans,LA,70130,NOL-01,,0,correctable
+POL-000192,1189 Coral Way,,Miami,FL,33134,MIA-03,wrong_zip,1,to_be_measured
+POL-000193,1188 N Shepherd Dr,Apt 3,Houston,TX,77008,HOU-05,missing_unit,1,not_detectable
+POL-000194,131 East Bay St,,Charleston,SC,29401,CHS-03,,0,correctable
+POL-000195,3135 Savannah Hwy,,Charleston,SC,29414,CHS-06,,0,correctable
+POL-000196,2180 Allen Pkwy,,Houston,TX,77019,HOU-06,street_typo,1,correctable
+POL-000197,1178 Arapahoe Ave,,Boulder,CO,80302,BOU-03,,0,correctable
+POL-000198,1146 W Flagler St,,Miami,FL,33130,MIA-02,nonexistent_address,1,unresolvable
+POL-000199,169 Meeting St,,Charleston,SC,29401,CHS-02,wrong_zip,1,to_be_measured
+POL-000200,1006 S Claiborne Ave,,New Orleans,LA,70125,NOL-04,,0,correctable

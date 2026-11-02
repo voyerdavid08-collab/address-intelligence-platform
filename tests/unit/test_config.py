@@ -1,0 +1,154 @@
+from decimal import Decimal
+
+import pytest
+
+from address_intelligence.config import ConfigError, Settings
+from address_intelligence.credits import CreditLedger
+import main as cli
+
+
+def test_settings_repr_masks_secrets(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PRECISELY_API_KEY", "key-secret-value")
+    monkeypatch.setenv("PRECISELY_API_SECRET", "api-secret-value")
+
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+    assert "****" in repr(settings)
+    assert "key-secret-value" not in repr(settings)
+    assert "api-secret-value" not in repr(settings)
+    assert "key-secret-value" not in str(settings)
+    assert "api-secret-value" not in str(settings)
+
+
+def test_credentials_are_optional_until_required(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PRECISELY_API_KEY", raising=False)
+    monkeypatch.delenv("PRECISELY_API_SECRET", raising=False)
+
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+    assert settings.api_key is None
+    assert settings.api_secret is None
+    with pytest.raises(ConfigError, match="PRECISELY_API_KEY.*PRECISELY_API_SECRET"):
+        settings.require_api_credentials()
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "invalid", "NaN", "Infinity"])
+def test_invalid_credit_hard_cap_is_rejected(monkeypatch, tmp_path, value):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CREDIT_HARD_CAP", value)
+
+    with pytest.raises(ConfigError, match="CREDIT_HARD_CAP"):
+        Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+
+def test_credit_hard_cap_is_decimal(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CREDIT_HARD_CAP", "2150")
+
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+    assert settings.credit_hard_cap == Decimal("2150")
+    assert settings.trial_credits == Decimal("2500")
+
+
+def test_trial_credits_must_be_positive(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRIAL_CREDITS", "0")
+
+    with pytest.raises(ConfigError, match="TRIAL_CREDITS"):
+        Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+
+def test_groq_settings_load_and_secret_is_masked(monkeypatch, tmp_path):
+    monkeypatch.setenv("GROQ_API_KEY", "groq-private-value")
+    monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    monkeypatch.setenv("REMEDIATION_MODEL", "openai/gpt-oss-20b")
+    monkeypatch.setenv("GROQ_DAILY_TOKEN_BUDGET", "180000")
+
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+    assert settings.groq_api_key == "groq-private-value"
+    assert settings.groq_model == "openai/gpt-oss-120b"
+    assert settings.remediation_model == "openai/gpt-oss-20b"
+    assert settings.groq_daily_token_budget == 180000
+    assert "groq-private-value" not in repr(settings)
+
+
+def test_remediation_model_defaults_to_gpt_oss_20b(monkeypatch, tmp_path):
+    monkeypatch.delenv("REMEDIATION_MODEL", raising=False)
+    settings = Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+    assert settings.remediation_model == "openai/gpt-oss-20b"
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "invalid"])
+def test_groq_daily_token_budget_must_be_positive_integer(monkeypatch, tmp_path, value):
+    monkeypatch.setenv("GROQ_DAILY_TOKEN_BUDGET", value)
+
+    with pytest.raises(ConfigError, match="GROQ_DAILY_TOKEN_BUDGET"):
+        Settings.from_env(dotenv_path=tmp_path / "test-settings.env")
+
+
+def test_check_config_prints_account_credits_left(monkeypatch, capsys):
+    settings = Settings(
+        api_key=None,
+        api_secret=None,
+        base_url="https://api.precisely.com",
+        credit_hard_cap=Decimal("2150"),
+        trial_credits=Decimal("2500"),
+        log_level="INFO",
+    )
+    ledger = type(
+        "Ledger",
+        (),
+        {
+            "cumulative_spent": Decimal("12.81"),
+            "hard_cap": Decimal("2150"),
+            "remaining": Decimal("2137.19"),
+        },
+    )()
+    monkeypatch.setattr(
+        cli.Settings,
+        "from_env",
+        classmethod(lambda cls: settings),
+    )
+    monkeypatch.setattr(cli, "CreditLedger", lambda cap: ledger)
+    monkeypatch.setattr(cli, "configure_logging", lambda configured: None)
+    monkeypatch.setattr("sys.argv", ["main.py", "--check-config"])
+
+    assert cli.main() == 0
+
+    assert "Account credits left: 2487.19" in capsys.readouterr().out
+
+
+def test_empty_process_values_fall_back_to_dotenv(monkeypatch, tmp_path):
+    dotenv_path = tmp_path / "test-settings.env"
+    dotenv_path.write_text(
+        "PRECISELY_API_KEY=file-key\n"
+        "PRECISELY_API_SECRET=file-secret\n"
+        "PRECISELY_BASE_URL=https://example.test\n"
+        "CREDIT_HARD_CAP=123\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PRECISELY_API_KEY", "")
+    monkeypatch.setenv("PRECISELY_API_SECRET", "")
+    monkeypatch.setenv("PRECISELY_BASE_URL", "")
+    monkeypatch.setenv("CREDIT_HARD_CAP", "")
+
+    settings = Settings.from_env(dotenv_path=dotenv_path)
+
+    assert settings.api_key == "file-key"
+    assert settings.api_secret == "file-secret"
+    assert settings.base_url == "https://example.test"
+    assert settings.credit_hard_cap == Decimal("123")
+
+
+def test_default_ledger_path_is_independent_of_current_directory(monkeypatch, tmp_path):
+    first = CreditLedger(Decimal("2150")).path
+
+    monkeypatch.chdir(tmp_path)
+    second = CreditLedger(Decimal("2150")).path
+
+    assert first == second
+    assert first.name == "credit_ledger.json"
+    assert first.parts[-3:] == ("data", "state", "credit_ledger.json")

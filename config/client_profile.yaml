@@ -1,0 +1,62 @@
+# Configuration for the current synthetic insurance-carrier demonstration.
+client:
+  name: "Fictional national insurance carrier (synthetic)"
+  country: "US"
+
+input:
+  path: "data/input/policyholders_synthetic.csv"
+  id_column: "policy_id"
+  column_mapping:
+    policy_id: "policy_id"
+    address_line1: "raw_address_line1"
+    address_line2: "raw_address_line2"
+    city: "raw_city"
+    state: "raw_state"
+    zip5: "raw_zip5"
+    metro: "metro"
+
+# Keep per-client row-level outputs and caches under the ignored data/output tree.
+output:
+  run_dir: "data/output/run"
+  reports_dir: "reports"
+
+# Optional labelled reference data; real clients typically do not supply this.
+evaluation:
+  ground_truth_path: "data/input/ground_truth.csv"
+
+verification:
+  eligible_precision_prefixes: ["S5", "S7", "S8"]
+
+enrichment:
+  operations:
+    - name: "flood_by_location"
+      enabled: true
+    - name: "distance_to_flood_hazard_by_location"
+      enabled: true
+    - name: "property_attributes_v2"
+      enabled: true
+      attributes: ["builtYear"]
+  preciselyid_by_address:
+    enabled: true
+
+comparison:
+  enabled: true
+  sample_size: 40
+  seed: 20261029
+
+ai:
+  narratives:
+    enabled: true
+  remediation:
+    enabled: true
+    samples: 5
+    conformal_alpha: 0.10
+
+data_handling:
+  publish_row_level: false
+  retention_days: 30
+  private_workbook_note:
+    - "Confidential: contains Precisely API Content (Precisely APIs Acceptable Use Policy, April 2021, \u00a74.1\u20134.2)."
+    - "Shared only with the Precisely review team for assignment evaluation. Not published; local copies are stored securely and deleted by 2026-11-27 (within 30 days of retrieval)."
+    - "The public version of this workbook in the repository contains the same tabs, with made-up example rows in Validated and Enriched."
+  note: "Precisely APIs AUP (April 2021) §4.1–4.2: no public row-level display; temporary secure storage only."

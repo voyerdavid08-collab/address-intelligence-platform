@@ -1,0 +1,43 @@
+street_id,status,reason,validated_on
+HOU-01,accepted,validated,2026-10-29
+HOU-02,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+HOU-03,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+HOU-04,accepted,validated,2026-10-29
+HOU-05,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+HOU-06,accepted,validated,2026-10-29
+HOU-07,accepted,validated,2026-10-29
+NOL-01,accepted,validated,2026-10-29
+NOL-02,accepted,validated,2026-10-29
+NOL-03,accepted,validated,2026-10-29
+NOL-04,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+NOL-05,accepted,validated,2026-10-29
+NOL-06,accepted,validated,2026-10-29
+NOL-07,accepted,validated,2026-10-29
+MIA-01,accepted,validated,2026-10-29
+MIA-02,accepted,validated,2026-10-29
+MIA-03,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+MIA-04,accepted,validated,2026-10-29
+MIA-05,accepted,validated,2026-10-29
+MIA-06,accepted,validated,2026-10-29
+MIA-07,accepted,validated,2026-10-29
+TPA-01,accepted,validated,2026-10-29
+TPA-02,accepted,validated,2026-10-29
+TPA-03,accepted,validated,2026-10-29
+TPA-04,accepted,validated,2026-10-29
+TPA-05,accepted,validated,2026-10-29
+TPA-06,accepted,validated,2026-10-29
+TPA-07,accepted,validated,2026-10-29
+CHS-01,accepted,validated,2026-10-29
+CHS-02,accepted,validated,2026-10-29
+CHS-03,accepted,validated,2026-10-29
+CHS-04,accepted,validated,2026-10-29
+CHS-05,accepted,validated,2026-10-29
+CHS-06,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29
+CHS-07,accepted,validated,2026-10-29
+BOU-01,accepted,validated,2026-10-29
+BOU-02,accepted,validated,2026-10-29
+BOU-03,accepted,validated,2026-10-29
+BOU-04,accepted,validated,2026-10-29
+BOU-05,accepted,validated,2026-10-29
+BOU-06,accepted,validated,2026-10-29
+BOU-07,accepted (ZIP corrected),input ZIP corrected after address-level match,2026-10-29

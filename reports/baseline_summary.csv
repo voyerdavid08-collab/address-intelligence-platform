@@ -1,0 +1,23 @@
+section,metric,value,combination,count
+Input quality,Input rows,200,,
+Input quality,Missing ZIP,16 (8.0%),,
+Input quality,Missing house number,10 (5.0%),,
+Input quality,Unit where expected unknown,not measurable pre-API,,
+Input quality,ZIP format valid,184 (92.0%),,
+Input quality,State format valid,200 (100.0%),,
+Input quality,City-state-ZIP matches reference,166 (83.0%),,
+Input quality,Duplicate address records beyond first,0 (0.0%),,
+Defect injection,street_typo actual (target 10%),20 (10.0%),,
+Defect injection,city_typo actual (target 6%),12 (6.0%),,
+Defect injection,missing_zip actual (target 8%),16 (8.0%),,
+Defect injection,wrong_zip actual (target 5%),10 (5.0%),,
+Defect injection,missing_house_number actual (target 5%),10 (5.0%),,
+Defect injection,missing_unit actual (target 5%),10 (5.0%),,
+Defect injection,nonexistent_address actual (target 4%),8 (4.0%),,
+Defect injection,Unique dirty records,76 (38.0%),,
+Defect injection,Overlapping records (2+ defects),10 (5.0%),,
+Defect combinations,,,street_typo+missing_zip,2
+Defect combinations,,,city_typo+wrong_zip,2
+Defect combinations,,,street_typo+city_typo,2
+Defect combinations,,,city_typo+missing_zip,2
+Defect combinations,,,street_typo+missing_unit,2
