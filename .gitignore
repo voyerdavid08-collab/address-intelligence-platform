@@ -8,3 +8,6 @@ data/output/
 data/clients/
 data/state/
 *.log
+private/
+*_PRIVATE.*
+*.docx
