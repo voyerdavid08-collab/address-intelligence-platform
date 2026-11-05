@@ -415,3 +415,56 @@ def test_http_500_still_logs_failure_wording(tmp_path, caplog):
     assert "not billed" not in caplog.text
     assert ledger._read_state()["entries"][0]["outcome"] == "failure"
     assert _real_mtime() == before
+
+
+def test_structured_av_maps_fields_separately_for_both_products(tmp_path):
+    session = Mock()
+    session.post.return_value = _response(
+        200, {"access_token": "private-token", "expiresIn": "35999"}
+    )
+    session.request.return_value = _response(200, {"Output": [{"Status": ""}]})
+    client = _client(tmp_path, session=session)
+
+    for product, path, operation in (
+        ("premium", "validatemailingaddresspremium", "address_verification_us"),
+        ("uscan", "validatemailingaddressuscan", "address_verification_uscan"),
+    ):
+        client.validate_mailing_address_structured(
+            product,
+            address_line1="1 Main St",
+            address_line2="Ste 2",
+            city="Boulder",
+            state_province="CO",
+            postal_code="80301",
+            firm_name="Acme",
+        )
+        call = session.request.call_args
+        assert call.args[1].endswith(f"/addressverification/v1/{path}/results.json")
+        body = call.kwargs["json"]
+        assert body["Input"]["Row"] == [
+            {
+                "AddressLine1": "1 Main St",
+                "AddressLine2": "Ste 2",
+                "City": "Boulder",
+                "StateProvince": "CO",
+                "PostalCode": "80301",
+                "Country": "USA",
+                "FirmName": "Acme",
+            }
+        ]
+        assert body["options"]["OutputFieldLevelReturnCodes"] == "Y"
+        assert client.ledger._read_state()["entries"][-1]["operation"] == operation
+    for flag in (
+        "PerformUSProcessing",
+        "PerformDPV",
+        "PerformSuiteLink",
+        "PerformLACSLink",
+        "DPVDetermineVacancy",
+        "DPVDetermineNoStat",
+    ):
+        assert body["options"][flag] == "Y"
+
+
+def test_structured_av_rejects_unknown_product(tmp_path):
+    with pytest.raises(ValueError):
+        _client(tmp_path).validate_mailing_address_structured("x", address_line1="a")
