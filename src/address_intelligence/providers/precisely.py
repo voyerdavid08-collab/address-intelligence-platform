@@ -12,6 +12,37 @@ import requests
 from address_intelligence.config import ConfigError, Settings
 from address_intelligence.credits import CreditLedger
 
+_AV_COMMON_OPTIONS = {
+    "OutputCasing": "M",
+    "MaximumResults": "1",
+    "KeepMultimatch": "N",
+    "OutputAddressBlocks": "Y",
+    "OutputCountryFormat": "E",
+    "OutputFieldLevelReturnCodes": "Y",
+    "OutputRecordType": "A",
+}
+_AV_PRODUCTS: dict[str, tuple[str, str, dict[str, str]]] = {
+    "premium": (
+        "address_verification_us",
+        "/addressverification/v1/validatemailingaddresspremium/results.json",
+        {**_AV_COMMON_OPTIONS, "OutputScript": "InputScript"},
+    ),
+    "uscan": (
+        "address_verification_uscan",
+        "/addressverification/v1/validatemailingaddressuscan/results.json",
+        {
+            **_AV_COMMON_OPTIONS,
+            "PerformUSProcessing": "Y",
+            "PerformDPV": "Y",
+            "PerformSuiteLink": "Y",
+            "PerformLACSLink": "Y",
+            "DPVDetermineVacancy": "Y",
+            "DPVDetermineNoStat": "Y",
+            "ExtractFirm": "N",
+            "OutputFormattedOnFail": "N",
+        },
+    ),
+}
 
 @dataclass(frozen=True)
 class ProviderResponse:
@@ -158,6 +189,43 @@ class PreciselyClient:
                             "StateProvince": "",
                             "PostalCode": "",
                             "FirmName": "",
+                        }
+                    ]
+                },
+            },
+        )
+
+    def validate_mailing_address_structured(
+        self,
+        product: str,
+        *,
+        address_line1: str,
+        address_line2: str = "",
+        city: str = "",
+        state_province: str = "",
+        postal_code: str = "",
+        firm_name: str = "",
+    ) -> ProviderResponse:
+        if product not in _AV_PRODUCTS:
+            raise ValueError("product must be premium or uscan.")
+        operation, path, options = _AV_PRODUCTS[product]
+        return self._request(
+            operation,
+            1,
+            "POST",
+            path,
+            json={
+                "options": dict(options),
+                "Input": {
+                    "Row": [
+                        {
+                            "AddressLine1": address_line1,
+                            "AddressLine2": address_line2,
+                            "City": city,
+                            "StateProvince": state_province,
+                            "PostalCode": postal_code,
+                            "Country": "USA",
+                            "FirmName": firm_name,
                         }
                     ]
                 },
