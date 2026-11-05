@@ -62,7 +62,7 @@ def test_kpis_are_read_from_summary_csv_fixture(tmp_path):
     kpis = load_summary_kpis(path)
     assert kpis is not None
     assert kpis["correct_building"] == {
-        "label": "Correct building",
+        "label": "Right address",
         "before": "5/10 (50.0%)",
         "after": "8/10 (80.0%)",
     }
@@ -181,7 +181,7 @@ def test_kpi_tile_deltas_are_derived_from_fixture_csv(tmp_path):
     assert all("%" not in str(tile["delta"]) for tile in tiles)
     assert all(tile["delta_color"] == "normal" for tile in tiles[:2])
     ui_source = (root / "app" / "ui.py").read_text(encoding="utf-8")
-    assert 'text="Records on the right building, before and after, by issue type"' in ui_source
+    assert 'text="Records with the right address, before and after, by issue type"' in ui_source
 
 
 def _read_fixture_csv(path):
@@ -245,7 +245,14 @@ def test_no_ground_truth_summary_uses_fallback_kpis(tmp_path):
     kpis = load_summary_kpis(path)
     assert kpis is not None
     assert kpis["has_reference"] is False
-    assert [tile["value"] for tile in load_fallback_kpis(path)] == [
+    fallback = load_fallback_kpis(path)
+    assert [tile["label"] for tile in fallback] == [
+        "Placed automatically",
+        "Enriched with flood data",
+        "Sent to manual review",
+        "AI suggestions confirmed by Precisely",
+    ]
+    assert [tile["value"] for tile in fallback] == [
         "8/10 (80.0%)",
         "6/10 (60.0%)",
         "2/10 (20.0%)",

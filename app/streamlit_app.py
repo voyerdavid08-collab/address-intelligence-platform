@@ -415,8 +415,8 @@ with start_tab:
         st.subheader("Questions", anchor=False)
         for question, answer in (
             (
-                "What does 'verified to the building' mean?",
-                "Precisely confirms the address down to the exact building. Only those addresses get flood and property data; the rest go to manual review. The share depends on the quality of the client's data: tab 3 starts at 85%, the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
+                "What does 'placed automatically' mean?",
+                "S8 is an exact address point; S5 and S7 are placed on the street segment. These records are eligible for flood and property data; the rest go to manual review. The share depends on the quality of the client's data: tab 3 starts at 85%, the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
             ),
             (
                 "Why is the price a list price?",
@@ -892,7 +892,7 @@ with results_tab:
     else:
         queue, _is_demo = load_exception_queue(profile.run_dir)
         st.warning(
-            "Real Precisely results on this computer. Fine for local review; do not share screenshots or exports of individual records outside Precisely (Acceptable Use Policy, sections 4.1–4.2)."
+            "Real Precisely results, for private review only."
         )
         if queue and all(row.get("suggestion_status") == "Not available" for row in queue):
             st.info("AI suggestions are off for this client until a labelled calibration sample is available.")
@@ -1004,7 +1004,7 @@ with results_tab:
             st.markdown("**Summary for operations**")
             st.write(detail.get("narrative", ""))
         st.info(
-            "AI proposes, Precisely verifies: no AI change is applied unless Precisely confirms it."
+            "AI proposes, Precisely verifies: every suggestion goes to an analyst for review."
         )
 
 app_ui.render_footer()

@@ -1,6 +1,6 @@
 # Address Intelligence Platform
 
-A reusable Python pipeline and local app that verifies, standardises and enriches insurance policy addresses with Precisely APIs, then adds grounded AI summaries and AI-assisted exception handling. It is demonstrated on 200 synthetic policy records for a fictional national insurance carrier.
+A prototype address-intelligence platform built on Precisely's APIs: a reusable Python pipeline and local app that verifies, standardises and enriches insurance policy addresses, then adds grounded AI summaries and AI-assisted exception handling. It is demonstrated on 200 synthetic addresses for a fictional national insurance carrier.
 
 The pipeline runs in separate stages, each dry-run first, so every paid call is planned and approved before it is made. A per-client profile controls the input file, column mapping, enrichment items and AI switches, so a new client needs a new profile and their file, not new code.
 
@@ -24,10 +24,10 @@ Aggregates only, from the 200-record synthetic run. Full tables: [reports/before
 
 | Measure | Result |
 | --- | --- |
-| Correct building | 138/200 before, 169/200 after |
+| Correct address | 138/200 before, 169/200 after |
 | Flawed records fully corrected (including unit) | 6/76 before, 37/76 after |
-| Flawed records with the right building | 14/76 before, 45/76 after (+1 where Precisely's ZIP differs from the synthetic reference) |
-| Verified to building level and enriched | 170/200; 30 routed to manual review |
+| Flawed records with the right address | 14/76 before, 45/76 after (+1 where Precisely's ZIP differs from the synthetic reference) |
+| Placed automatically and enriched | 170/200 (39 exact address points, 131 street segment); 30 routed to manual review |
 | Coarse vs verified location changes the flood-risk tier | 14/39 (6 understated, 8 overstated) |
 | AI exception handling: top-answer accuracy | 62/68 (91.2%) |
 | AI exception handling: conformal test coverage | 32/34 (94.1%) at a 90% target |
@@ -43,7 +43,7 @@ Aggregates only, from the 200-record synthetic run. Full tables: [reports/before
 - **Enrichment**: flood, property and PreciselyID data are requested only for records verified at precision S5, S7 or S8.
 - **Comparison**: a coarse location is compared with the verified one to show where it changes the flood-risk tier.
 - **AI narratives**: a short underwriting-support summary built from allowlisted derived fields only.
-- **AI exception handling**: diagnoses why a record failed, then follows "AI proposes, Precisely verifies": a suggested fix is applied only if Precisely confirms it.
+- **AI exception handling**: diagnoses why a record failed, then follows "AI proposes, Precisely verifies": a suggested fix goes to an analyst for review only if Precisely confirms the address exists.
 - **Reports**: aggregate reports and a workbook.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
@@ -58,7 +58,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 | Year built | Building age and codes affect vulnerability | Adjust risk for older construction | 13/170 (where available) | 1 |
 | PreciselyID | A permanent identifier for the location | Link policies, claims and future data to the same place over time | 39/170 (exact address points) | 0.01 |
 
-Enrichment is bought only for addresses verified to the building (S5/S7/S8): a coarse location changed the flood-risk tier for 14 of 39 compared records.
+Enrichment is bought only for addresses placed at S5, S7 or S8.
 
 ### Deliberately not used
 
@@ -127,7 +127,7 @@ The pipeline stages (1-4) are a dry run by default: they print the planned calls
 .venv\Scripts\streamlit run app/streamlit_app.py
 ```
 
-Open http://localhost:8501. The app is local only and must not be deployed.
+Open http://localhost:8501. This local app is a prototype of a workflow built on Precisely's APIs; it must not be deployed.
 
 - **Start here**: purpose, data safety and a 60-second walkthrough.
 - **1 Onboard**: upload a CSV or Excel file, match columns, save the settings file.
@@ -171,13 +171,13 @@ Client results: aggregate results and the work list (made-up examples).
 
 ## Testing
 
-Run `pytest`. The last run passed 347 tests. Unit tests use temporary folders and a temporary credit ledger.
+Run `pytest`. The last run passed 365 tests. Unit tests use temporary folders and a temporary credit ledger.
 
 ### Live end-to-end test of a new client
 
 A 6-record Excel file with different column names was onboarded in the app and run live:
 
-- 5 records verified to the building, including one missing ZIP that Precisely filled in; 1 routed to manual review.
+- 5 records placed automatically, including one missing ZIP that Precisely filled in; 1 routed to manual review.
 - PreciselyID returned for the 2 records matched to an exact address point (S8).
 - Flood data for 5 of 5.
 - AI narratives: 5 generated plus 1 template.
@@ -204,7 +204,7 @@ Example output schema (MADE-UP EXAMPLE ONLY; not API data):
 
 ## Synthetic data
 
-Synthetic policy records use generated house numbers on real public street anchors that passed address validation, with generated defects kept separate as ground truth. See [data/input/README.md](data/input/README.md) for the seed, distribution, defect rates, outcomes, and limitations.
+The synthetic sample uses generated house numbers on real public street anchors that passed address validation, with generated defects kept separate as ground truth. See [data/input/README.md](data/input/README.md) for the seed, distribution, defect rates, outcomes, and limitations.
 
 Faker was considered for addresses but generates fictional streets that cannot be verified or enriched; real street anchors (validated with Geocode Premium) with generated house numbers were used instead. Faker is used for non-address fields.
 
@@ -215,7 +215,7 @@ The optional narrative stage turns a small, allowlisted set of derived location 
 ## AI exception handling
 
 - **Layer 1, diagnosis**: each exception is classified 5 times by the model. Split-conformal prediction, calibrated on labelled examples, turns these into a set of likely causes and routes the record to customer outreach or analyst review.
-- **Layer 2, "AI proposes, Precisely verifies"**: a suggested fix is applied only if Geocode Premium confirms it. House numbers are never changed.
+- **Layer 2, "AI proposes, Precisely verifies"**: a suggested fix goes to an analyst for review only if Precisely confirms the address exists. House numbers are never changed.
 
 For a new client, Layer 1 needs a labelled calibration sample of the client's own exceptions (about 30-70; the reference run used 68). Until then it reports "not available" and exceptions go to the analyst work list. Layer 2's safety comes from Precisely verification, not from labels. Aggregates: [reports/remediation_calibration.md](reports/remediation_calibration.md) and [reports/remediation_actions.md](reports/remediation_actions.md).
 
@@ -254,7 +254,7 @@ Groq was selected for the brief's free-tier requirement (free plan, $0). Its Ser
   - Value from day one: the AI suggests a fix for each problem address and Precisely confirms it before it is shown, so analysts start from a verified suggestion instead of researching from scratch. It is safe from the first record, because nothing changes unless Precisely confirms it.
   - No separate labelling project: each exception an analyst resolves records its true cause, so the client's own calibration set builds up as a by-product of normal work.
   - Faster path to automation: after about 30–70 resolved exceptions, confidence is calibrated on the client's own data and the client moves to the full process: automatic routing (for example, missing house numbers straight to customer outreach) with fewer manual touches. In the reference run, the full process resolved about 3 in 4 flawed addresses without manual research.
-  - Trust built in: every automatic decision is backed by a measured confidence level on the client's own data, and every applied fix by Precisely.
+  - Trust built in: rules decide the clear cases, and every suggestion is confirmed by Precisely before an analyst reviews it.
 - Per-client credit attribution in the ledger.
 
 ### Later

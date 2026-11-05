@@ -193,7 +193,7 @@ available products or fields until confirmed.
 | Flood risk level | Support location-risk review for Risk 2 | Risk 2 | Yes, 170/170 | API risk tier | No | Yes |
 | Base flood elevation | Support location-risk review for Risk 2 | Risk 2 | Yes, 56/170 | API value and unit; normally available in high-risk zones | No | Yes |
 | Distance to flood hazard | Support location-risk review for Risk 2 | Risk 2 | Yes, 170/170 | Distance and returned unit | No | Yes |
-| `builtYear` | Property context for underwriting review | Risk 2 | Yes, 13/170 | Year built; substantial coverage gap | No | Yes |
+| `builtYear` | Property context for underwriting review | Risk 2 | Yes, 13/170 | Year built; likely reflects generated house numbers as well as data coverage; an ALL-CAPS control ruled out address casing only. | No | Yes |
 
 ## 7. LLM option check
 
@@ -209,7 +209,7 @@ available products or fields until confirmed.
 | Question or blocker | Resolution | Status | Source / notes |
 |---|---|---|---|
 | Pricing model for API use | Trial credit metering; selected operation costs and observed full-run usage recorded below | Resolved | Account dashboard, observed 2026-10-29 |
-| Property-data coverage gap | `builtYear` returned 13/170; ALL-CAPS control confirmed missing values are coverage, not address casing | Resolved; limitation disclosed | Full run, observed 2026-10-29 |
+| Property-data coverage gap | `builtYear` returned 13/170; likely reflects generated house numbers as well as data coverage; an ALL-CAPS control ruled out address casing only. | Resolved; limitation disclosed | Full run, observed 2026-10-29 |
 | PreciselyID eligibility | Returned for 39/170 and only for address-point matches | Resolved | Full run, observed 2026-10-29 |
 | Licensing approach | Row-level Precisely outputs remain private; observe April 2021 Acceptable Use Policy §§4.1–4.2 | Resolved | Project licensing decision |
 | Remaining blockers | None blocking | Resolved | Full run complete |
@@ -224,8 +224,9 @@ available products or fields until confirmed.
 - Empty `{}` responses were not charged; content-bearing “not found” answers
   were charged.
 - PreciselyID returned for 39/170 eligible records (address points only).
-  `builtYear` returned for 13/170; the property coverage gap was confirmed with
-  an ALL-CAPS control test. Flood zone/risk/distance returned for 170/170;
+  `builtYear` returned for 13/170; likely reflects generated house numbers as
+  well as data coverage; an ALL-CAPS control ruled out address casing only.
+  Flood zone/risk/distance returned for 170/170;
   BFE returned for 56/170 (high-risk zones).
 - Dashboard balance: 838.80 credits left.
 

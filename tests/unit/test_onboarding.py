@@ -617,7 +617,7 @@ def test_results_chart_spec_uses_full_names_integer_ticks_and_title():
     ]
     spec = app_ui.build_results_chart(rows, chart_data).to_dict()
     assert spec["title"]["text"] == (
-        "Records on the right building, before and after, by issue type"
+        "Records with the right address, before and after, by issue type"
     )
     assert spec["layer"][0]["encoding"]["y"]["axis"]["labelLimit"] == 0
     assert spec["layer"][0]["encoding"]["x"]["axis"]["format"] == "d"
@@ -692,13 +692,22 @@ def test_start_here_and_no_inner_steppers():
     assert "Open tab 1 and click \"Use made-up sample client\"" in start_tab
     assert "enter 300,000 policies and set the verified share to 100%" in start_tab
     for question in (
-        "What does 'verified to the building' mean?",
+        "What does 'placed automatically' mean?",
         "Why is the price a list price?",
         "Who is the work list for?",
         "Why is there a 'made-up / real' switch?",
         "What never leaves this computer?",
     ):
         assert question in start_tab
+    assert (
+        "S8 is an exact address point; S5 and S7 are placed on the street segment."
+        in start_tab
+    )
+    assert "Real Precisely results, for private review only." in source
+    assert (
+        "AI proposes, Precisely verifies: every suggestion goes to an analyst for review."
+        in source
+    )
     assert 'header[data-testid="stHeader"] { display:none; height:0; }' in app_ui._GLOBAL_CSS
     assert "padding-top: 16px" in ui_source
     assert "active_step" not in app_ui.__dict__

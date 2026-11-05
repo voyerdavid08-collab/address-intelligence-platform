@@ -123,7 +123,7 @@ def load_summary_kpis(path: str | Path) -> dict[str, Any] | None:
             for row in rows
         ),
         "correct_building": {
-            "label": "Correct building",
+            "label": "Right address",
             "before": value("Correct building: all records", "before"),
             "after": value("Correct building: all records", "after"),
         },
@@ -150,7 +150,7 @@ def load_fallback_kpis(path: str | Path) -> list[dict[str, str]]:
     rows = read_summary_csv(path)
     metrics = {row.get("metric", ""): row for row in rows}
     definitions = (
-        ("Verified to the building", "Eligible"),
+        ("Placed automatically", "Eligible"),
         ("Enriched with flood data", "flood_zone_code over all input"),
         ("Sent to manual review", "Manual review"),
         ("AI suggestions confirmed by Precisely", "Precisely-verified"),

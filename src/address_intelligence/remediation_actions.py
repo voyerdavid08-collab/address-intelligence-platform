@@ -154,7 +154,7 @@ def _suggestion_input(
 
 def _request_messages(model_input: dict[str, Any]) -> list[dict[str, str]]:
     system = (
-        "You propose a possible correction to a synthetic address for analyst "
+        "You propose a possible correction to an address for analyst "
         "review. Use only submitted address fields, cause shortlist, and match "
         "signals. Do not change state or add/change a house number. Return a "
         "strict JSON object with line1, city, zip5, changed_fields, rationale. "

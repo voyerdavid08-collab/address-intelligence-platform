@@ -375,7 +375,7 @@ def build_results_chart(
     chart = (bars + labels).properties(
         height=max(190, 38 * len(rows)),
         title=alt.TitleParams(
-            text="Records on the right building, before and after, by issue type",
+            text="Records with the right address, before and after, by issue type",
             anchor="start",
             color=COLORS["navy"],
             fontSize=16,

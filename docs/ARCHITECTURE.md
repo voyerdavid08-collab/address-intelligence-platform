@@ -38,7 +38,7 @@ flowchart TD
 | `src/address_intelligence/metrics.py` | Builds aggregate before-and-after metrics and reports. |
 | `src/address_intelligence/workbook.py` | Builds public and private Excel workbooks. |
 | `src/address_intelligence/baseline.py` | Calculates baseline metrics from the input and reference data. |
-| `src/address_intelligence/synthetic_data.py` | Generates synthetic policy records and their reference data. |
+| `src/address_intelligence/synthetic_data.py` | Generates synthetic addresses and their reference data. |
 | `src/address_intelligence/onboarding.py` | Guesses column mappings and builds client profiles. |
 | `src/address_intelligence/app_data.py` | Loads local client results and prepares app-facing data. |
 | `src/address_intelligence/logging_setup.py` | Configures application logging. |
@@ -89,7 +89,7 @@ Narratives are checked for valid JSON, grounded numbers, allowed evidence fields
 
 **Layer 1, diagnosis:** the model samples each exception 5 times; split-conformal prediction, calibrated on labelled examples, forms a set of likely causes and supports routing. In the reference run, top-answer accuracy was 62/68 and test coverage was 32/34 at a 90% target.
 
-**Layer 2, verified suggestions:** a fix is applied only when Geocode Premium confirms it; house numbers are never changed. In the reference run, 6/6 suggestions confirmed by Precisely were correct, with 0 incorrect.
+**Layer 2, verified suggestions:** a suggested fix goes to an analyst for review only if Precisely confirms the address exists. House numbers are never changed. In the reference run, 6/6 suggestions confirmed by Precisely were correct, with 0 incorrect.
 
 ## Testing strategy
 

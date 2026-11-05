@@ -70,7 +70,7 @@ class _ProviderFailure(Exception):
 
 
 class PreciselyClient:
-    """Make explicitly requested API calls without retries or secret logging."""
+    """Make explicitly requested API calls; retries live in the pipeline layer. No secret logging."""
 
     TIMEOUT_SECONDS = 30
 
