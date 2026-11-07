@@ -1,6 +1,6 @@
 # Configuration for the current synthetic insurance-carrier demonstration.
 client:
-  name: "Fictional national insurance carrier (synthetic)"
+  name: "Marova Insurance"
   country: "US"
 
 input:

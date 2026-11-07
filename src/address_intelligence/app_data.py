@@ -133,7 +133,7 @@ def load_summary_kpis(path: str | Path) -> dict[str, Any] | None:
             "after": value("Fully correct (incl. unit): dirty records", "after"),
         },
         "flood_tier_changes": {
-            "label": "Flood-risk tier changes from coarse location",
+            "label": "Flood-risk tier changes from city-level location",
             "value": value("Flood-risk tier changed", "after"),
         },
         "ai_verified": {
@@ -150,7 +150,7 @@ def load_fallback_kpis(path: str | Path) -> list[dict[str, str]]:
     rows = read_summary_csv(path)
     metrics = {row.get("metric", ""): row for row in rows}
     definitions = (
-        ("Placed automatically", "Eligible"),
+        ("Located automatically", "Eligible"),
         ("Enriched with flood data", "flood_zone_code over all input"),
         ("Sent to manual review", "Manual review"),
         ("AI suggestions confirmed by Precisely", "Precisely-verified"),
@@ -388,7 +388,7 @@ def defect_chart_options() -> dict[str, Any]:
     """Visual options for a side-by-side before/after comparison."""
     return {
         "stack": False,
-        "color": ["#9AA5B1", "#12A3B4"],
+        "color": ["#9AA5B1", "#8017E1"],
         "y_label": "Records correct",
     }
 

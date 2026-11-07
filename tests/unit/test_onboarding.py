@@ -677,7 +677,7 @@ def test_start_here_and_no_inner_steppers():
         ":material/upload_file: 1 Onboard"
     )
     assert (
-        "This tool helps a Solutions Architect assess a prospect's address data, "
+        "This tool helps a Sales Engineer assess a prospect's address data, "
         "price a clean-up, and show the client what they receive after the run. "
         "It runs only on this computer."
     ) in start_tab
@@ -692,7 +692,7 @@ def test_start_here_and_no_inner_steppers():
     assert "Open tab 1 and click \"Use made-up sample client\"" in start_tab
     assert "enter 300,000 policies and set the verified share to 100%" in start_tab
     for question in (
-        "What does 'placed automatically' mean?",
+        "What does 'located automatically' mean?",
         "Why is the price a list price?",
         "Who is the work list for?",
         "Why is there a 'made-up / real' switch?",
@@ -700,10 +700,10 @@ def test_start_here_and_no_inner_steppers():
     ):
         assert question in start_tab
     assert (
-        "S8 is an exact address point; S5 and S7 are placed on the street segment."
+        "An automatically located record has an S8 exact address point or an S5 or S7 placement on the street segment."
         in start_tab
     )
-    assert "Real Precisely results, for private review only." in source
+    assert "Live Precisely results. Private screen share only." in source
     assert (
         "AI proposes, Precisely verifies: every suggestion goes to an analyst for review."
         in source
@@ -861,14 +861,14 @@ def test_streamlit_demo_smoke_if_dependency_is_installed():
 
 def test_visual_tokens_and_real_mode_compliance_css():
     assert "Segoe UI" in app_ui.FONT_STACK
-    assert app_ui.COLORS["navy"] == "#0B2341"
-    assert app_ui.COLORS["teal"] == "#12A3B4"
+    assert app_ui.COLORS["brand_dark"] == "#39006B"
+    assert app_ui.COLORS["brand"] == "#8017E1"
     assert "stElementToolbar" not in app_ui.real_mode_compliance_css(False)
     assert "stElementToolbar" in app_ui.real_mode_compliance_css(True)
     assert "[data-testid=\"stElementToolbar\"]" not in app_ui._GLOBAL_CSS
     config = (ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8")
-    assert app_ui.COLORS["navy"] in app_ui._GLOBAL_CSS
-    assert app_ui.COLORS["teal"] in config
+    assert app_ui.COLORS["brand_dark"] in app_ui._GLOBAL_CSS
+    assert app_ui.COLORS["brand"] in config
     assert app_ui.FONT_STACK.split(",")[0].strip('"') in config
 
 

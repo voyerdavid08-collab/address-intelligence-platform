@@ -78,7 +78,7 @@ def _profile_fixture(tmp_path, *, columns=None):
 
 def test_default_profile_reproduces_hardcoded_pipeline_values():
     profile = load_client_profile()
-    assert profile.data["client"]["name"] == "Fictional national insurance carrier (synthetic)"
+    assert profile.data["client"]["name"] == "Marova Insurance"
     assert profile.input_path == ROOT / "data" / "input" / "policyholders_synthetic.csv"
     assert profile.column_mapping == {
         "policy_id": "policy_id",

@@ -91,7 +91,7 @@ def test_before_after_chart_data_is_grouped_not_stacked(tmp_path):
     ]
     assert defect_chart_options() == {
         "stack": False,
-        "color": ["#9AA5B1", "#12A3B4"],
+        "color": ["#9AA5B1", "#8017E1"],
         "y_label": "Records correct",
     }
     assert defect_chart_series(kpis) == [
@@ -172,7 +172,7 @@ def test_kpi_tile_deltas_are_derived_from_fixture_csv(tmp_path):
     tiles = namespace["_build_kpi_tile_values"](path)
     assert tiles[0]["delta"] == "+31 records vs before"
     assert tiles[1]["delta"] == "+31 records vs before"
-    assert tiles[2]["label"] == "Coarse location changes flood-risk tier"
+    assert tiles[2]["label"] == "City-level location changes flood-risk tier"
     assert tiles[2]["value"] == "14/39"
     assert tiles[2]["delta"] == "6 under-, 8 over-priced"
     assert tiles[2]["delta_color"] == "off"
@@ -247,7 +247,7 @@ def test_no_ground_truth_summary_uses_fallback_kpis(tmp_path):
     assert kpis["has_reference"] is False
     fallback = load_fallback_kpis(path)
     assert [tile["label"] for tile in fallback] == [
-        "Placed automatically",
+        "Located automatically",
         "Enriched with flood data",
         "Sent to manual review",
         "AI suggestions confirmed by Precisely",

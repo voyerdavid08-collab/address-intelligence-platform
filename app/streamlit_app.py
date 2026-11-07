@@ -3,6 +3,7 @@
 import csv
 import hashlib
 from io import StringIO
+import os
 from pathlib import Path
 import re
 import sys
@@ -186,7 +187,7 @@ def _build_kpi_tile_values(summary_path: Path) -> list[dict[str, str | int]]:
 
     tiles.append(
         {
-            "label": "Coarse location changes flood-risk tier",
+            "label": "City-level location changes flood-risk tier",
             "value": flood_value,
             "delta": (
                 f"{metric_count('Coarse location understated verified risk')} under-, "
@@ -355,13 +356,29 @@ for key, default in (
     if key not in st.session_state:
         st.session_state[key] = default
 
+demo_mode_enabled = os.environ.get("AIP_DEMO_MODE") == "1"
+if "demo_session_initialized" not in st.session_state:
+    if demo_mode_enabled and not st.session_state.uploaded_content:
+        demo_profile = load_client_profile(DEFAULT_PROFILE_PATH)
+        _reset_mapping_state()
+        st.session_state.pop("excel_sheet", None)
+        st.session_state.uploaded_content = demo_profile.input_path.read_bytes()
+        st.session_state.uploaded_name = "marova_policy_sample.csv"
+        st.session_state.demo_preloaded_mapping = demo_profile.column_mapping
+        st.session_state.onboarding_mapping = dict(st.session_state.demo_preloaded_mapping)
+        st.session_state.parsed_upload_source = (st.session_state.uploaded_name, None)
+        st.session_state.demo_preloaded_fingerprint = _file_fingerprint()
+    st.session_state.demo_session_initialized = True
+
 with start_tab:
     app_ui.render_tab_intro(
         "Start here",
-        "This tool helps a Solutions Architect assess a prospect's address data, price a clean-up, and show the client what they receive after the run. It runs only on this computer.",
+        "This tool helps a Sales Engineer assess a prospect's address data, price a clean-up, and show the client what they receive after the run. It runs only on this computer.",
     )
     st.caption(
-        "Default figures come from a reference run on 200 synthetic records; replace them with the client's own results after a sample run."
+        "Default figures come from a reference run on 200 records; replace them with the client's own results after a sample run."
+        if demo_mode_enabled
+        else "Default figures come from a reference run on 200 synthetic records; replace them with the client's own results after a sample run."
     )
     with st.container(border=True):
         st.subheader("How it works", anchor=False)
@@ -369,19 +386,19 @@ with start_tab:
             [
                 {
                     "title": "1 Onboard",
-                    "who": "Solutions Architect.",
+                    "who": "Sales Engineer.",
                     "provide": "The client's address file (CSV or Excel).",
                     "get": "A settings file that tells the pipeline which column is which.",
                 },
                 {
                     "title": "2 Pre-flight",
-                    "who": "Solutions Architect.",
+                    "who": "Sales Engineer.",
                     "provide": "Nothing more.",
                     "get": "A free check showing which issues Precisely usually fixes and which need the client.",
                 },
                 {
                     "title": "3 Cost & plan",
-                    "who": "Solutions Architect, then the technical team.",
+                    "who": "Sales Engineer, then the technical team.",
                     "provide": "The number of policies to price.",
                     "get": "An indicative list price and the run steps.",
                 },
@@ -415,8 +432,8 @@ with start_tab:
         st.subheader("Questions", anchor=False)
         for question, answer in (
             (
-                "What does 'placed automatically' mean?",
-                "S8 is an exact address point; S5 and S7 are placed on the street segment. These records are eligible for flood and property data; the rest go to manual review. The share depends on the quality of the client's data: tab 3 starts at 85%, the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
+                "What does 'located automatically' mean?",
+                "An automatically located record has an S8 exact address point or an S5 or S7 placement on the street segment. These records are eligible for flood and property data; the rest go to manual review. The share depends on the quality of the client's data: tab 3 starts at 85%, the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
             ),
             (
                 "Why is the price a list price?",
@@ -449,6 +466,10 @@ with onboard_tab:
             "Upload the client file (CSV or Excel)",
             type=("csv", "xlsx"),
             help="Choose a CSV or Excel (.xlsx) file up to 200 MB. It stays in memory on this computer until you save the client folder.",
+            key=(
+                f"demo_uploader_{st.session_state.get('demo_uploader_revision', 0)}"
+                if demo_mode_enabled else None
+            ),
         )
         if uploaded_file is not None:
             uploaded_content = uploaded_file.getvalue()
@@ -465,6 +486,10 @@ with onboard_tab:
             "Use made-up sample client",
             icon=":material/table_view:",
         ):
+            if demo_mode_enabled:
+                st.session_state.demo_uploader_revision = (
+                    st.session_state.get("demo_uploader_revision", 0) + 1
+                )
             st.session_state.uploaded_content = SAMPLE_PATH.read_bytes()
             st.session_state.uploaded_name = SAMPLE_PATH.name
             st.session_state.sample_mode = True
@@ -518,7 +543,12 @@ with onboard_tab:
             edited_key = f"folder_edited_{fingerprint}"
             if name_key not in st.session_state:
                 st.session_state[name_key] = (
-                    "Sample fictional carrier" if st.session_state.sample_mode else ""
+                    "Marova Insurance"
+                    if demo_mode_enabled and (
+                        st.session_state.sample_mode
+                        or st.session_state.get("demo_preloaded_fingerprint") == fingerprint
+                    )
+                    else "Sample fictional carrier" if st.session_state.sample_mode else ""
                 )
             if folder_key not in st.session_state:
                 st.session_state[folder_key] = (
@@ -556,7 +586,10 @@ with onboard_tab:
             "file has no such column (allowed only for optional fields)."
         )
         with st.container(border=True):
-            suggestions = suggest_mapping(columns)
+            if st.session_state.get("demo_preloaded_fingerprint") == fingerprint:
+                suggestions = st.session_state.demo_preloaded_mapping
+            else:
+                suggestions = suggest_mapping(columns)
             chosen: dict[str, str | None] = {}
             for canonical in CANONICAL_COLUMNS:
                 optional = canonical not in REQUIRED_COLUMNS
@@ -754,7 +787,9 @@ with cost_tab:
         st.info("Map all required columns in tab 1 first.")
     else:
         mapping = st.session_state.get("onboarding_mapping") or suggest_mapping(columns)
-        client_name = st.session_state.get("client_name", "Sample fictional carrier")
+        client_name = st.session_state.get(
+            "client_name", "Marova Insurance" if demo_mode_enabled else "Sample fictional carrier"
+        )
         slug = st.session_state.get(
             "client_slug", _slugify(client_name)
         )
@@ -892,7 +927,7 @@ with results_tab:
     else:
         queue, _is_demo = load_exception_queue(profile.run_dir)
         st.warning(
-            "Real Precisely results, for private review only."
+            "Live Precisely results. Private screen share only."
         )
         if queue and all(row.get("suggestion_status") == "Not available" for row in queue):
             st.info("AI suggestions are off for this client until a labelled calibration sample is available.")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 from html import escape
+from pathlib import Path
 from typing import Any
 
 import altair as alt
@@ -10,8 +12,8 @@ import streamlit as st
 
 FONT_STACK = '"Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif'
 COLORS = {
-    "navy": "#0B2341",
-    "teal": "#12A3B4",
+    "brand_dark": "#39006B",
+    "brand": "#8017E1",
     "text": "#1F2A37",
     "muted": "#5B6B7B",
     "border": "#E3E8EF",
@@ -29,7 +31,7 @@ COLORS = {
 _GLOBAL_CSS = f"""
 <style>
 :root {{
-  --ai-navy: {COLORS["navy"]}; --ai-teal: {COLORS["teal"]};
+  --ai-brand-dark: {COLORS["brand_dark"]}; --ai-brand: {COLORS["brand"]};
   --ai-text: {COLORS["text"]}; --ai-muted: {COLORS["muted"]};
   --ai-border: {COLORS["border"]}; --ai-surface: {COLORS["surface"]};
   --ai-white: {COLORS["white"]}; --ai-radius: 8px;
@@ -41,29 +43,29 @@ _GLOBAL_CSS = f"""
 }}
 header[data-testid="stHeader"] {{ display:none; height:0; }}
 h1, h2, h3, h4, [data-testid="stHeadingWithActionElements"] {{
-  color: var(--ai-navy) !important; letter-spacing: -0.02em;
+  color: var(--ai-brand-dark) !important; letter-spacing: -0.02em;
 }}
 [data-testid="stHeadingWithActionElements"] button {{ display: none; }}
 [data-testid="stTabs"] [role="tab"] {{
   color: var(--ai-muted); font-weight: 600; padding: 14px 18px;
 }}
 [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
-  color: var(--ai-navy); border-bottom-color: var(--ai-teal);
+  color: var(--ai-brand-dark); border-bottom-color: var(--ai-brand);
 }}
 [data-testid="stTabs"] [role="tab"]:focus-visible,
 button:focus-visible, input:focus-visible, textarea:focus-visible,
 [role="combobox"]:focus-visible {{
-  outline: 3px solid var(--ai-teal) !important; outline-offset: 2px;
+  outline: 3px solid var(--ai-brand) !important; outline-offset: 2px;
 }}
 [data-testid="stVerticalBlockBorderWrapper"] {{
   border-color: var(--ai-border); border-radius: var(--ai-radius);
-  box-shadow: 0 1px 2px rgba(11,35,65,.06); background: var(--ai-white);
+  box-shadow: 0 1px 2px rgba(57,0,107,.06); background: var(--ai-white);
 }}
 [data-testid="stMetricValue"] {{
-  color: var(--ai-navy); font-variant-numeric: tabular-nums;
+  color: var(--ai-brand-dark); font-variant-numeric: tabular-nums;
 }}
 [data-testid="stBaseButton-primary"] {{
-  color: var(--ai-navy) !important;
+  color: var(--ai-white) !important;
 }}
 [data-testid="stDataFrame"] {{ border: 1px solid var(--ai-border); border-radius: 8px; }}
 footer {{ visibility: hidden; }}
@@ -91,11 +93,21 @@ def apply_styles(*, real_mode: bool = False) -> None:
 
 
 def render_header() -> None:
+    logo_path = Path(__file__).parent / "assets" / "brand" / "precisely-logo.webp"
+    try:
+        logo_data = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except FileNotFoundError:
+        logo_html = ""
+    else:
+        logo_html = (
+            f'<img class="ai-brand-logo" src="data:image/webp;base64,{logo_data}" '
+            'alt="Precisely">'
+        )
     st.markdown(
         f"""
         <div class="ai-header">
           <div>
-            <div class="ai-brand">Address Intelligence</div>
+            <div class="ai-brand">{logo_html}Address Intelligence</div>
             <div class="ai-subtitle">Client onboarding and assessment</div>
           </div>
           <div class="ai-mode">{escape("Local only")}</div>
@@ -109,23 +121,24 @@ def render_header() -> None:
         .ai-header {{
           display:flex; align-items:center; justify-content:space-between; gap:24px;
           margin:0 0 24px; padding:24px 28px; border-radius:8px;
-          background:{COLORS["navy"]}; color:#fff;
+          background:{COLORS["brand_dark"]}; color:#fff;
         }}
-        .ai-brand {{ font-size:26px; font-weight:700; letter-spacing:-.02em; }}
-        .ai-subtitle {{ margin-top:4px; color:#D5DFEA; font-size:14px; }}
+        .ai-brand {{ display:flex; align-items:center; flex-wrap:wrap; gap:12px; font-size:26px; font-weight:700; letter-spacing:-.02em; }}
+        .ai-brand-logo {{ height:28px; width:auto; max-width:100%; filter:brightness(0) invert(1); }}
+        .ai-subtitle {{ margin-top:4px; color:#E9DBF5; font-size:14px; }}
         .ai-mode {{
           border-radius:999px; padding:8px 13px; font-weight:600; font-size:13px;
-          white-space:nowrap; color:{COLORS["navy"]}; background:#E7EEF5;
+          white-space:nowrap; color:{COLORS["brand_dark"]}; background:#F0E5FA;
         }}
-        .ai-tab-title {{ margin:8px 0 4px; font-size:24px; color:{COLORS["navy"]}; font-weight:700; }}
+        .ai-tab-title {{ margin:8px 0 4px; font-size:24px; color:{COLORS["brand_dark"]}; font-weight:700; }}
         .ai-purpose {{ margin:0 0 18px; color:{COLORS["muted"]}; font-size:14px; }}
         .ai-journey-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }}
         .ai-journey-card {{
           min-width:0; padding:16px; border:1px solid {COLORS["border"]};
           border-radius:8px; background:{COLORS["white"]};
-          box-shadow:0 1px 2px rgba(11,35,65,.06);
+          box-shadow:0 1px 2px rgba(57,0,107,.06);
         }}
-        .ai-journey-title {{ margin-bottom:12px; color:{COLORS["navy"]}; font-size:16px; font-weight:700; }}
+        .ai-journey-title {{ margin-bottom:12px; color:{COLORS["brand_dark"]}; font-size:16px; font-weight:700; }}
         .ai-journey-field {{ margin-top:10px; }}
         .ai-journey-label {{ display:block; color:{COLORS["muted"]}; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }}
         .ai-journey-value {{ display:block; margin-top:3px; color:{COLORS["text"]}; font-size:13px; line-height:1.45; }}
@@ -136,10 +149,10 @@ def render_header() -> None:
         .ai-kpi {{
           min-height:144px; height:100%; box-sizing:border-box; display:flex; flex-direction:column; padding:17px 18px;
           border:1px solid {COLORS["border"]}; border-radius:8px; background:#fff;
-          box-shadow:0 1px 2px rgba(11,35,65,.06);
+          box-shadow:0 1px 2px rgba(57,0,107,.06);
         }}
         .ai-kpi-label {{ color:{COLORS["muted"]}; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }}
-        .ai-kpi-value {{ margin-top:10px; color:{COLORS["navy"]}; font-size:27px; font-weight:700; font-variant-numeric:tabular-nums; }}
+        .ai-kpi-value {{ margin-top:10px; color:{COLORS["brand_dark"]}; font-size:27px; font-weight:700; font-variant-numeric:tabular-nums; }}
         .ai-kpi-bottom {{ margin-top:auto; padding-top:10px; display:flex; flex-direction:column; align-items:flex-start; gap:7px; }}
         .ai-kpi-delta {{ display:inline-block; border-radius:999px; padding:4px 8px; font-size:12px; font-weight:600; color:{COLORS["muted"]}; background:{COLORS["surface"]}; }}
         .ai-kpi-delta.positive {{ color:{COLORS["success"]}; background:{COLORS["success_tint"]}; }}
@@ -205,7 +218,7 @@ def render_kpi_row(cards: list[dict[str, Any]], *, columns: int = 4) -> None:
 def share_bar_html(shares: list[dict[str, Any]]) -> str:
     colors = {
         "Needs client follow-up": COLORS["danger"],
-        "Precisely usually fixes": COLORS["teal"],
+        "Precisely usually fixes": COLORS["brand"],
         "Review": COLORS["warning"],
         "No issues found": "#D8E0E8",
     }
@@ -237,7 +250,7 @@ def share_bar_html(shares: list[dict[str, Any]]) -> str:
         text_color = (
             COLORS["white"]
             if group in ("Needs client follow-up", "Precisely usually fixes")
-            else COLORS["navy"]
+            else COLORS["brand_dark"]
         )
         percentage = float(row["percentage"])
         label = f'{int(row["count"]):,} · {percentage:.0f}%'
@@ -333,7 +346,7 @@ def build_results_chart(
             "Series:N",
             scale=alt.Scale(
                 domain=["Before", "After"],
-                range=[COLORS["before"], COLORS["teal"]],
+                range=[COLORS["before"], COLORS["brand"]],
             ),
             legend=alt.Legend(
                 title=None,
@@ -377,7 +390,7 @@ def build_results_chart(
         title=alt.TitleParams(
             text="Records with the right address, before and after, by issue type",
             anchor="start",
-            color=COLORS["navy"],
+            color=COLORS["brand_dark"],
             fontSize=16,
             offset=16,
         ),
@@ -391,7 +404,7 @@ def theme_chart(chart: alt.TopLevelMixin) -> alt.TopLevelMixin:
         .configure_view(stroke=None)
         .configure_axis(
             labelColor=COLORS["muted"],
-            titleColor=COLORS["navy"],
+            titleColor=COLORS["brand_dark"],
             gridColor=COLORS["border"],
             domainColor=COLORS["border"],
             labelFont="Segoe UI",

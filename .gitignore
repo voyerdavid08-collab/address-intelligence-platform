@@ -9,5 +9,6 @@ data/clients/
 data/state/
 *.log
 private/
+app/assets/brand/
 *_PRIVATE.*
 *.docx
