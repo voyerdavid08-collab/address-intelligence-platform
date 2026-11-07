@@ -55,5 +55,5 @@ def test_header_without_logo(monkeypatch, tmp_path):
     ui.render_header()
 
     assert "Address Intelligence" in calls[0]
-    assert '<div class="ai-mode">Local only</div>' in calls[0]
+    assert '<div class="ai-mode">Runs on this computer</div>' in calls[0]
     assert "<img" not in calls[0]

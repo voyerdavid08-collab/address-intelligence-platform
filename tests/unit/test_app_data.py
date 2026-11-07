@@ -7,6 +7,7 @@ from decimal import Decimal
 import pytest
 
 from address_intelligence.app_data import (
+    _fraction,
     defect_chart_data,
     defect_chart_series,
     defect_chart_options,
@@ -165,11 +166,13 @@ def test_kpi_tile_deltas_are_derived_from_fixture_csv(tmp_path):
     ]
     namespace = {
         "Path": Path,
+        "_fraction": _fraction,
         "load_summary_kpis": load_summary_kpis,
         "read_summary_csv": lambda csv_path: _read_fixture_csv(csv_path),
     }
     exec(compile(ast.Module(body=definitions, type_ignores=[]), str(root / "app" / "streamlit_app.py"), "exec"), namespace)
     tiles = namespace["_build_kpi_tile_values"](path)
+    assert namespace["_fraction_count"]("1e+06/2e+06 (50.0%)") == ("1e+06/2e+06", 1000000)
     assert tiles[0]["delta"] == "+31 records vs before"
     assert tiles[1]["delta"] == "+31 records vs before"
     assert tiles[2]["label"] == "City-level location changes flood-risk tier"

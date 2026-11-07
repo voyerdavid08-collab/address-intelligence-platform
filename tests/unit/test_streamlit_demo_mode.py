@@ -1,4 +1,6 @@
 from pathlib import Path
+import csv
+from io import StringIO
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -40,6 +42,36 @@ def test_demo_mode_off_leaves_session_empty(monkeypatch, offline_app, value):
     )
 
 
+def test_real_mode_without_results_does_not_claim_work_was_completed(monkeypatch, offline_app):
+    monkeypatch.delenv("AIP_DEMO_MODE", raising=False)
+    app = offline_app.run(timeout=30)
+    next(radio for radio in app.radio if radio.label == "Show:").set_value(
+        "Real results on this computer"
+    ).run(timeout=30)
+    assert not app.exception
+    html = "\n".join(element.value for element in app.markdown)
+    assert "Automated checks" not in html
+    assert any("Live Precisely results. Private screen share only." in item.value for item in app.warning)
+
+
+def test_header_is_visible_before_and_after_loading_sample(monkeypatch, offline_app):
+    monkeypatch.delenv("AIP_DEMO_MODE", raising=False)
+    app = offline_app.run(timeout=30)
+    assert not app.exception
+    header = [item.value for item in app.markdown if '<div class="ai-header">' in item.value]
+    assert len(header) == 1
+    assert "Address Intelligence" in header[0] and "Runs on this computer" in header[0]
+
+    next(button for button in app.button if button.label == "Use made-up sample client").click().run(timeout=30)
+    assert not app.exception
+    header = [item.value for item in app.markdown if '<div class="ai-header">' in item.value]
+    assert len(header) == 1
+    client_name = next(item for item in app.text_input if item.label == "Client name").value
+    assert f"<strong>{client_name}</strong>" in header[0]
+    assert "Loaded file:" not in header[0]
+    assert "records" in header[0]
+
+
 def test_demo_mode_preloads_mapped_file_and_preflight(monkeypatch, offline_app):
     monkeypatch.setenv("AIP_DEMO_MODE", "1")
 
@@ -62,7 +94,8 @@ def test_demo_mode_preloads_mapped_file_and_preflight(monkeypatch, offline_app):
         "Made-up examples (safe to share)"
     )
     assert any("200 records in the uploaded file." in element.value for element in app.caption)
-    assert any("Free check on the submitted file" in element.value for element in app.caption)
+    assert all("Free check on the submitted file" not in element.value for element in app.caption)
+    assert any("A free check on" in element.value for element in app.markdown)
     assert any(
         "Out of" in frame.value.columns and set(frame.value["Out of"]) == {200}
         for frame in app.dataframe
@@ -86,6 +119,25 @@ def test_demo_mode_preserves_file_already_loaded_at_start(monkeypatch, offline_a
     assert not app.exception
     assert app.session_state["uploaded_content"] == content
     assert app.session_state["uploaded_name"] == "existing.csv"
+
+
+def test_sample_button_updates_preflight_headline_and_share(monkeypatch, offline_app):
+    monkeypatch.delenv("AIP_DEMO_MODE", raising=False)
+    app = offline_app.run(timeout=30)
+    next(button for button in app.button if button.label == "Use made-up sample client").click().run(timeout=30)
+    assert not app.exception
+    content = app.session_state["uploaded_content"].decode("utf-8-sig")
+    rows = list(csv.DictReader(StringIO(content)))
+    summaries = onboarding.preflight_group_summaries(
+        onboarding.preflight_checks(rows, app.session_state["onboarding_mapping"])
+    )
+    clean = next(int(row["count"]) for row in summaries if row["group"] == "No issues found")
+    headline = app_data.preflight_headline(clean, len(rows))
+    html = "\n".join(element.value for element in app.markdown)
+    assert headline in html
+    for row in summaries:
+        if row["percentage"]:
+            assert f'{row["group"]}: {row["count"]} · {row["percentage"]:.0f}%' in html
 
 
 def test_demo_mode_does_not_replace_later_upload_or_sample(monkeypatch, offline_app):

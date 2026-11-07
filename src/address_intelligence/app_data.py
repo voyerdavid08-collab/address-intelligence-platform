@@ -1,16 +1,104 @@
 """Read-only local data access for the Streamlit results and exceptions tabs."""
 
 import csv
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
 from address_intelligence.onboarding import format_confidence, friendly_label
+
+
+def _fraction(value: str | None) -> tuple[int, int] | None:
+    """Parse the count and denominator from a report fraction."""
+    if not isinstance(value, str):
+        return None
+    number = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
+    match = re.fullmatch(
+        rf"\s*({number})\s*/\s*({number})(?:\s*\(\s*[0-9]+(?:\.[0-9]+)?%\s*\))?\s*",
+        value,
+    )
+    if not match:
+        return None
+    try:
+        numbers = [Decimal(part.replace(",", "")) for part in match.groups()]
+    except InvalidOperation:
+        return None
+    if any(number.adjusted() > 100 or number != number.to_integral_value() for number in numbers):
+        return None
+    count, total = map(int, numbers)
+    return (count, total) if total and count <= total else None
+
+
+def preflight_headline(clean: int | None, total: int | None) -> str:
+    if clean is None or total is None or clean < 0 or total < 0 or clean > total:
+        return "No pre-flight data available."
+    if total == 0:
+        return "No addresses to check."
+    address = "address" if total == 1 else "addresses"
+    issues = total - clean
+    if issues == 0:
+        return f"All {total:,} {address} {'looks' if total == 1 else 'look'} clean."
+    issue_verb = "shows" if issues == 1 else "show"
+    clean_verb = "looks" if total == 1 else "look"
+    return f"{clean:,} of {total:,} {address} {clean_verb} clean. {issues:,} {issue_verb} an issue."
+
+
+def results_headline(
+    before: str | None, after: str | None, eligible: str | None, has_reference: bool
+) -> str:
+    result = _fraction(after if has_reference else eligible)
+    if result is None:
+        return "No results data available."
+    count, total = result
+    address = "address" if total == 1 else "addresses"
+    if not has_reference:
+        verb = "was" if total == 1 else "were"
+        return f"{count:,} of {total:,} {address} {verb} located automatically."
+    verb = "is" if total == 1 else "are"
+    earlier = _fraction(before)
+    gain = f", up from {earlier[0]:,}" if earlier and earlier[1] == total and count > earlier[0] else ""
+    return f"{count:,} of {total:,} {address} {verb} right{gain}."
+
+
+def cost_headline(
+    credits: int | float | Decimal | None,
+    policies: int | None,
+    price: float | Decimal | None,
+) -> str:
+    if credits is None or policies is None or price is None:
+        return "No cost estimate available."
+    credits_value, price_value = Decimal(str(credits)), Decimal(str(price))
+    if not credits_value.is_finite() or not price_value.is_finite() or min(credits_value, price_value, policies) < 0:
+        return "No cost estimate available."
+    credit_display = f"{credits_value:,.0f}"
+    credit_unit = "credit" if credit_display == "1" else "credits"
+    policy_unit = "policy" if policies == 1 else "policies"
+    price_display = f"${price_value:,.0f}" if price_value >= 1000 else f"${price_value:,.2f}"
+    return f"About {credit_display} {credit_unit} for {policies:,} {policy_unit}: {price_display} at list price."
+
+
+def onboard_headline(records: int | None, matched: int | None, required: int | None) -> str:
+    if records is None or matched is None or required is None or min(records, matched, required) < 0 or matched > required:
+        return "No file data available."
+    record_unit = "record" if records == 1 else "records"
+    column_unit = "column" if required == 1 else "columns"
+    return f"{records:,} {record_unit} loaded. {matched:,} of {required:,} required {column_unit} matched."
+
+
+def work_path(total: int, queue: list[dict[str, Any]]) -> dict[str, int]:
+    analyst_rows = [row for row in queue if row.get("next_action") == "analyst_review"]
+    verified = sum(
+        str(row.get("verification_status", "")).strip().casefold() == "verified by precisely"
+        for row in analyst_rows
+    )
+    return {"total": total, "queue": len(queue), "analyst": len(analyst_rows), "remaining": len(analyst_rows) - verified}
+
 
 _DEFECT_LABELS = {
     "city_typo": "City typo",
@@ -176,8 +264,10 @@ def defect_chart_rows(kpis: dict[str, Any]) -> list[dict[str, str | int]]:
         if row is None:
             continue
         try:
-            before = int(row["before"].split("/", 1)[0])
-            after = int(row["after"].split("/", 1)[0])
+            before_fraction = _fraction(row["before"])
+            after_fraction = _fraction(row["after"])
+            before = before_fraction[0] if before_fraction else int(row["before"].split("/", 1)[0])
+            after = after_fraction[0] if after_fraction else int(row["after"].split("/", 1)[0])
         except (ValueError, AttributeError):
             continue
         chart_rows.append(

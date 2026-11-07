@@ -2,6 +2,7 @@
 
 import csv
 import hashlib
+from html import escape
 from io import StringIO
 import os
 from pathlib import Path
@@ -21,7 +22,8 @@ sys.path.insert(0, str(ROOT / "app"))
 import ui as app_ui
 
 from address_intelligence.app_data import (
-    defect_chart_data,
+    _fraction,
+    cost_headline,
     defect_chart_rows,
     format_cost_breakdown_rows,
     format_exception_table_rows,
@@ -30,12 +32,14 @@ from address_intelligence.app_data import (
     load_summary_kpis,
     made_up_exception_workbook,
     open_folder,
+    onboard_headline,
     plain_flag_reason,
+    preflight_headline,
     REAL_SAVE_EXPLANATION as app_data_real_save_explanation,
     read_summary_csv,
+    results_headline,
     save_real_exception_workbook,
-    selected_policy_id,
-    zero_category_note,
+    work_path,
 )
 from address_intelligence.client_profile import DEFAULT_PROFILE_PATH, load_client_profile
 from address_intelligence.onboarding import (
@@ -135,6 +139,10 @@ def _slugify(value: str) -> str:
     return value or "new-client"
 
 
+def _client_file(name: str) -> str:
+    return f"{name.strip()}'s file" if name.strip() else "this client's file"
+
+
 def _profile_error_message(error: ValueError) -> str:
     message = str(error)
     if "Slug must" in message:
@@ -148,8 +156,8 @@ def _fraction_count(value: str) -> tuple[str, int]:
     fraction, _, _ = value.partition(" ")
     if "/" not in fraction:
         return fraction, 0
-    displayed, _denominator = fraction.split("/", 1)
-    return fraction, int(displayed) if displayed.isdigit() else 0
+    counts = _fraction(value)
+    return fraction, counts[0] if counts else 0
 
 
 def _build_kpi_tile_values(summary_path: Path) -> list[dict[str, str | int]]:
@@ -214,14 +222,19 @@ def _render_accuracy_chart(kpis: dict[str, Any]) -> None:
     rows = defect_chart_rows(kpis)
     if not rows:
         return
-    st.markdown('<div style="height:16px"></div>', unsafe_allow_html=True)
-    st.altair_chart(
-        app_ui.build_results_chart(rows, defect_chart_data(kpis)),
-        width="stretch",
-    )
-    note = zero_category_note(rows)
-    if note:
-        st.caption(note)
+    original = {
+        friendly_label(defect["defect"]): defect
+        for defect in kpis["defects"]
+    }
+    chart_rows = [
+        {
+            "Defect": row["Defect"],
+            "Before": str(original[row["Defect"]]["before"]),
+            "After": str(original[row["Defect"]]["after"]),
+        }
+        for row in rows
+    ]
+    app_ui.render_defect_rows(chart_rows)
 
 
 def _display_kpis(summary_path: Path) -> None:
@@ -233,8 +246,11 @@ def _display_kpis(summary_path: Path) -> None:
         st.info(":material/insights: No completed run yet. Run the clean-up from tab 3, step 4.")
         return
     if kpis["has_reference"]:
+        app_ui.render_results_band(
+            kpis["correct_building"]["before"], kpis["correct_building"]["after"]
+        )
         cards = []
-        for tile in _build_kpi_tile_values(summary_path):
+        for tile in _build_kpi_tile_values(summary_path)[1:]:
             tone = "positive" if tile["delta_color"] == "normal" else "neutral"
             cards.append(
                 {
@@ -245,11 +261,14 @@ def _display_kpis(summary_path: Path) -> None:
                     "caption": tile["caption"],
                 }
             )
-        app_ui.render_kpi_row(cards)
+        app_ui.render_kpi_row(cards, columns=3)
         _render_accuracy_chart(kpis)
         return
 
-    app_ui.render_kpi_row(load_fallback_kpis(summary_path))
+    fallback = load_fallback_kpis(summary_path)
+    if fallback:
+        app_ui.render_results_band("", fallback[0]["value"])
+    app_ui.render_kpi_row(fallback[1:], columns=3)
     st.info("Accuracy against a reference needs a labelled sample; not available for this client.")
 
 
@@ -287,6 +306,103 @@ def _verification_text(row: dict[str, Any]) -> str:
     ):
         return "Not verified"
     return friendly_label(str(row.get("verification_status", "not_started")))
+
+
+def _render_exception_detail(detail: dict[str, Any]) -> None:
+    values = format_exception_table_rows([detail])[0]
+    address = _format_address(detail.get("suggestion"))
+    reason = detail.get("rationale") or plain_flag_reason(detail.get("manual_review_reason") or "")
+    verification_details = detail.get("verification")
+    verification_available = bool(detail.get("verification_status")) or (
+        isinstance(verification_details, dict)
+        and any(verification_details.get(key) is True for key in (
+            "verified_correct", "verified_incorrect", "not_verified",
+        ))
+    )
+    verification = _verification_text(detail) if verification_available else ""
+    status = verification if verification in {"Confirmed correct", "Confirmed incorrect", "Rejected"} else (
+        values["Verification status"] or verification
+    )
+    status_key = status.casefold()
+    if status_key in {"confirmed incorrect", "rejected", "not verified"}:
+        color, background = "#B00062", "#FDE8F3"
+    elif status_key in {"confirmed", "confirmed correct"}:
+        color, background = "#39006B", "#F5EFFC"
+    else:
+        color, background = "#67420C", "#FFF6E5"
+    status_html = (
+        f'<span class="ai-case-status" style="display:inline-block;border-radius:999px;'
+        f'padding:4px 10px;color:{color};background:{background};font-weight:600">'
+        f'{escape(status)}</span>' if status else ""
+    )
+
+    with st.container(border=True):
+        st.markdown(
+            '<div style="display:flex;align-items:center;justify-content:space-between;'
+            'gap:12px;flex-wrap:wrap">'
+            f'<strong>Policy ID: {escape(str(detail.get("policy_id", "")))}</strong>{status_html}</div>',
+            unsafe_allow_html=True,
+        )
+        panels = [
+            (label, str(value), tinted)
+            for label, value, tinted in (
+                ("Suggested address", "" if address == "No suggested address." else address, True),
+                ("Why flagged", reason, False),
+                ("Summary for operations", detail.get("narrative"), False),
+            )
+            if value and str(value).strip()
+        ]
+        if panels:
+            panel_html = "".join(
+                '<div class="ai-case-panel" style="min-width:0;box-sizing:border-box;'
+                f'padding:14px;border:1px solid #E6E3F0;border-radius:8px;background:{"#F5EFFC" if tinted else "#FFFFFF"}">'
+                f'<div style="font-size:12px;color:#5F5A73;margin-bottom:6px">{escape(label)}</div>'
+                f'<div style="color:#1B1433;overflow-wrap:anywhere;white-space:pre-wrap">{escape(value)}</div></div>'
+                for label, value, tinted in panels
+            )
+            st.markdown(
+                '<style>@media(max-width:600px){.ai-case-panels{grid-template-columns:1fr !important}}</style>'
+                f'<div class="ai-case-panels" style="display:grid;'
+                f'grid-template-columns:repeat({len(panels)},minmax(0,1fr));gap:12px">{panel_html}</div>',
+                unsafe_allow_html=True,
+            )
+
+        stages = []
+        if address != "No suggested address.":
+            stages.append("AI suggested")
+        if (
+            str(detail.get("verification_status", "")).strip().casefold() == "verified by precisely"
+            and verification not in {"Confirmed incorrect", "Rejected"}
+        ) or verification == "Confirmed correct":
+            stages.append("Precisely confirmed")
+        if detail.get("next_action") == "analyst_review":
+            stages.append("Analyst decides")
+        if stages:
+            chips = ' <span aria-hidden="true">→</span> '.join(
+                f'<span style="display:inline-block;padding:4px 10px;border-radius:999px;'
+                f'background:#F5EFFC;color:#1B1433">{escape(stage)}</span>'
+                for stage in stages
+            )
+            st.markdown(
+                f'<div class="ai-case-flow" style="display:flex;align-items:center;'
+                f'gap:8px;flex-wrap:wrap;color:#1B1433">{chips}</div>',
+                unsafe_allow_html=True,
+            )
+
+        technical = [
+            (label, values[label])
+            for label, key in (
+                ("Match level", "precision_code"),
+                ("AI cause", "ai_cause_set"),
+                ("Confidence", "confidence"),
+            )
+            if detail.get(key) is not None and str(detail.get(key, "")).strip()
+        ]
+        if technical:
+            with st.expander("Technical detail", expanded=False):
+                for label, value in technical:
+                    st.markdown(f"**{label}**")
+                    st.write(value)
 
 
 def _stage_commands(
@@ -336,7 +452,7 @@ if "results_mode" not in st.session_state:
     st.session_state.results_mode = "Made-up examples (safe to share)"
 real_mode = st.session_state.results_mode == "Real results on this computer"
 app_ui.apply_styles(real_mode=real_mode)
-app_ui.render_header()
+header_placeholder = st.container()
 
 start_tab, onboard_tab, preflight_tab, cost_tab, results_tab = st.tabs(
     [
@@ -372,13 +488,8 @@ if "demo_session_initialized" not in st.session_state:
 
 with start_tab:
     app_ui.render_tab_intro(
-        "Start here",
+        "From client file to clean addresses, in four steps.",
         "This tool helps a Sales Engineer assess a prospect's address data, price a clean-up, and show the client what they receive after the run. It runs only on this computer.",
-    )
-    st.caption(
-        "Default figures come from a reference run on 200 records; replace them with the client's own results after a sample run."
-        if demo_mode_enabled
-        else "Default figures come from a reference run on 200 synthetic records; replace them with the client's own results after a sample run."
     )
     with st.container(border=True):
         st.subheader("How it works", anchor=False)
@@ -425,7 +536,7 @@ with start_tab:
             '1. Open tab 1 and click "Use made-up sample client".\n'
             "2. Check the suggested columns.\n"
             "3. Open tab 2 to see the free check.\n"
-            "4. Open tab 3, enter 300,000 policies and set the verified share to 100% (≈$27,030 at list price).\n"
+            "4. Open tab 3 and enter the policy count and expected located share.\n"
             "5. Open tab 4 to see the results and the work list."
         )
     with st.container(border=True):
@@ -433,7 +544,7 @@ with start_tab:
         for question, answer in (
             (
                 "What does 'located automatically' mean?",
-                "An automatically located record has an S8 exact address point or an S5 or S7 placement on the street segment. These records are eligible for flood and property data; the rest go to manual review. The share depends on the quality of the client's data: tab 3 starts at 85%, the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
+                "The address was located at an exact point or on its street. These records are eligible for flood and property data; the rest go to manual review. The share depends on the quality of the client's data and should be updated after a sample run.",
             ),
             (
                 "Why is the price a list price?",
@@ -456,10 +567,7 @@ with start_tab:
                 st.write(answer)
 
 with onboard_tab:
-    app_ui.render_tab_intro(
-        "Onboard a client",
-        "Prepare a client file and choose the services that fit the business need.",
-    )
+    onboard_title = st.empty()
     with st.container(border=True):
         st.subheader("Client file", anchor=False)
         uploaded_file = st.file_uploader(
@@ -606,6 +714,11 @@ with onboard_tab:
                 )
                 chosen[canonical] = None if selection == NO_MAPPING else selection
         st.session_state.onboarding_mapping = chosen
+        with onboard_title:
+            app_ui.render_tab_intro(
+                onboard_headline(len(rows), sum(bool(chosen.get(field)) for field in REQUIRED_COLUMNS), len(REQUIRED_COLUMNS)),
+                "Prepare the file and choose the services that fit the business need.",
+            )
 
         st.markdown(
             "**Columns ignored: these stay on this computer and are never sent to "
@@ -709,12 +822,21 @@ with onboard_tab:
                     "Saves the client file and settings to a private project folder (never uploaded to GitHub), ready for the run commands in tab 3. "
                     "Only the mapped address columns are saved; other columns are not kept."
                 )
+    else:
+        with onboard_title:
+            app_ui.render_tab_intro(
+                "Onboard a client",
+                "Prepare a client file and choose the services that fit the business need.",
+            )
+
+with header_placeholder:
+    app_ui.render_header(
+        client_name if columns else "",
+        len(rows) if columns else None,
+    )
 
 with preflight_tab:
-    app_ui.render_tab_intro(
-        "Pre-flight check",
-        "See which file issues are usually corrected automatically and which need attention.",
-    )
+    preflight_title = st.empty()
     if not st.session_state.uploaded_content:
         st.info(":material/upload_file: Upload a client file in tab 1 to check its quality.")
     elif not columns:
@@ -726,11 +848,16 @@ with preflight_tab:
     else:
         mapping = st.session_state.get("onboarding_mapping") or suggest_mapping(columns)
         checks = preflight_checks(rows, mapping)
-        st.caption("Free check on the submitted file; no credits used.")
         summaries = preflight_group_summaries(checks)
         summary_by_group = {str(row["group"]): row for row in summaries}
-        app_ui.render_kpi_row(
-            [
+        with preflight_title:
+            app_ui.render_tab_intro(
+                preflight_headline(int(summary_by_group["No issues found"]["count"]), len(rows)),
+                f"A free check on {_client_file(client_name)}, before any credits are spent.",
+            )
+        with st.container(border=True):
+            app_ui.render_share_chart(summaries)
+            app_ui.render_kpi_row([
                 {
                     "label": group,
                     "value": (
@@ -740,14 +867,12 @@ with preflight_tab:
                     "tone": tone,
                 }
                 for group, tone in (
-                    ("Needs client follow-up", "danger"),
-                    ("Precisely usually fixes", "positive"),
-                    ("Review", "warning"),
-                    ("No issues found", "neutral"),
+                    ("Needs client follow-up", "pink"),
+                    ("Precisely usually fixes", "purple"),
+                    ("Review", "yellow"),
+                    ("No issues found", "gray"),
                 )
-            ]
-        )
-        app_ui.render_share_chart(summaries)
+            ])
         st.caption(
             "Grouping reflects what Precisely corrected in our reference run: most missing ZIPs were fixed automatically, missing house numbers were not."
         )
@@ -771,12 +896,12 @@ with preflight_tab:
                 ),
             },
         )
+    if not columns or missing_required_message(st.session_state.get("onboarding_mapping") or {}):
+        with preflight_title:
+            app_ui.render_tab_intro("Pre-flight check", "Check the file before any credits are spent.")
 
 with cost_tab:
-    app_ui.render_tab_intro(
-        "Cost & plan",
-        "Estimate a one-time clean-up for the full book and prepare the next steps.",
-    )
+    cost_title = st.empty()
     if not st.session_state.uploaded_content:
         st.info(":material/request_quote: Upload a client file in tab 1 to estimate the full book.")
     elif not columns:
@@ -787,15 +912,18 @@ with cost_tab:
         st.info("Map all required columns in tab 1 first.")
     else:
         mapping = st.session_state.get("onboarding_mapping") or suggest_mapping(columns)
-        client_name = st.session_state.get(
-            "client_name", "Marova Insurance" if demo_mode_enabled else "Sample fictional carrier"
-        )
-        slug = st.session_state.get(
-            "client_slug", _slugify(client_name)
+        current_client_name = client_name
+        planning_name = current_client_name.strip() or (
+            "Marova Insurance" if demo_mode_enabled else "Sample fictional carrier"
         )
         profile_data = st.session_state.get("onboarding_profile")
+        slug = (
+            st.session_state.get("client_slug", _slugify(planning_name))
+            if profile_data is not None
+            else _slugify(planning_name)
+        )
         if profile_data is None:
-            profile_data = build_profile(client_name, slug, mapping)
+            profile_data = build_profile(planning_name, slug, mapping)
         checks = preflight_checks(rows, mapping)
         follow_up = next(
             row for row in preflight_group_summaries(checks)
@@ -803,15 +931,15 @@ with cost_tab:
         )
         slider, follow_up_column = st.columns([2, 1])
         eligible_percent = slider.slider(
-            "Expected share verified to the exact building",
+            "Expected share located automatically",
             min_value=0,
             max_value=100,
             value=85,
             step=1,
             format="%d%%",
             help=(
-                "Flood and property data are only bought for addresses Precisely verifies to the building. "
-                "Starts at 85% (reference run); replace with the client's own rate after a sample run."
+                "Flood and property data are bought for addresses located automatically. "
+                "Replace the initial estimate with the client's own rate after a sample run."
             ),
         )
         follow_up_column.metric(
@@ -835,6 +963,11 @@ with cost_tab:
         credits_per_policy = breakdown["credits_per_policy"]
         list_price = total_credits / 100
         usd_display = f"${list_price:,.0f}" if list_price >= 1000 else f"${list_price:,.2f}"
+        with cost_title:
+            app_ui.render_tab_intro(
+                cost_headline(total_credits, int(policies_to_price), list_price),
+                f"Estimate for {_client_file(current_client_name)}.",
+            )
         app_ui.render_kpi_row(
             [
                 {"label": "Estimated credits", "value": credit_total},
@@ -882,12 +1015,12 @@ with cost_tab:
         with st.expander("Commands for the technical team"):
             st.code("\n\n".join(_stage_commands(profile_path, ai_flags, bool(profile_data.get("comparison", {}).get("enabled")))), language="powershell")
             st.caption("Copy a command, review the dry-run plan, and get approval before any paid run.")
+    if not columns or missing_required_message(st.session_state.get("onboarding_mapping") or {}):
+        with cost_title:
+            app_ui.render_tab_intro("Cost & plan", "Estimate a one-time clean-up for the full book.")
 
 with results_tab:
-    app_ui.render_tab_intro(
-        "Client results",
-        "What the client receives after the run: a summary for leadership and a work list for operations."
-    )
+    results_title = st.empty()
     available_profiles = [DEFAULT_PROFILE_PATH]
     available_profiles.extend(
         sorted((ROOT / "data" / "clients").glob("*/client_profile.yaml"))
@@ -902,15 +1035,34 @@ with results_tab:
     selected_label = st.selectbox("Client", list(profile_options))
     profile_path = profile_options[selected_label]
     profile = load_client_profile(profile_path)
-    st.caption(f"From the completed run for {profile.data['client']['name']} · aggregates only")
     summary_path = profile.reports_dir / "before_after_summary.csv"
+    result_kpis = load_summary_kpis(summary_path)
+    if result_kpis:
+        eligible = next(
+            (row.get("after", "") for row in read_summary_csv(summary_path) if row.get("metric") == "Eligible"),
+            "",
+        )
+        result_title = results_headline(
+            result_kpis["correct_building"]["before"],
+            result_kpis["correct_building"]["after"],
+            eligible,
+            result_kpis["has_reference"],
+        )
+    else:
+        result_title = "Client results are not available yet."
+    with results_title:
+        app_ui.render_tab_intro(
+            result_title,
+            f"From the completed run for {profile.data['client']['name']}.",
+        )
     _display_kpis(summary_path)
 
-    st.subheader("Exceptions", anchor=False)
+    work_heading, work_mode = st.columns([1, 1])
+    work_heading.subheader("Work list for your analysts", anchor=False)
     st.write(
         "Work list for whoever maintains the client's address data: what to fix, who does it (customer outreach or analyst review), and whether Precisely confirmed an AI fix."
     )
-    display_mode = st.radio(
+    display_mode = work_mode.radio(
         "Show:",
         ["Made-up examples (safe to share)", "Real results on this computer"],
         horizontal=True,
@@ -929,6 +1081,15 @@ with results_tab:
         st.warning(
             "Live Precisely results. Private screen share only."
         )
+        if result_kpis:
+            try:
+                _, input_rows, _ = _read_uploaded_file(
+                    profile.input_path.name, profile.input_path.read_bytes()
+                )
+            except (OSError, UnicodeDecodeError, csv.Error, ValueError):
+                st.info("The input file is unavailable, so the work path cannot be displayed.")
+            else:
+                app_ui.render_work_path(work_path(len(input_rows), queue))
         if queue and all(row.get("suggestion_status") == "Not available" for row in queue):
             st.info("AI suggestions are off for this client until a labelled calibration sample is available.")
     if not queue:
@@ -938,16 +1099,19 @@ with results_tab:
         verification_values = sorted(
             {str(row.get("verification_status", "")) for row in queue}
         )
-        action_filter = st.selectbox(
-            "Filter by next action",
-            ["All", *action_values],
-            format_func=lambda value: "All" if value == "All" else friendly_label(value),
-        )
-        verification_filter = st.selectbox(
-            "Filter by verification status",
-            ["All", *verification_values],
-            format_func=lambda value: "All" if value == "All" else friendly_label(value),
-        )
+        action_column, verification_column = st.columns(2)
+        with action_column:
+            action_filter = st.selectbox(
+                "Filter by next action",
+                ["All", *action_values],
+                format_func=lambda value: "All" if value == "All" else friendly_label(value),
+            )
+        with verification_column:
+            verification_filter = st.selectbox(
+                "Filter by verification status",
+                ["All", *verification_values],
+                format_func=lambda value: "All" if value == "All" else friendly_label(value),
+            )
         filtered = [
             row for row in queue
             if (action_filter == "All" or row.get("next_action") == action_filter)
@@ -956,40 +1120,43 @@ with results_tab:
                 or row.get("verification_status") == verification_filter
             )
         ]
-        table_rows = format_exception_table_rows(filtered)
-        table_event = st.dataframe(
-            table_rows,
-            width="stretch",
-            hide_index=True,
-            height=36 * (len(table_rows) + 1) + 4,
-            column_config={
-                "Confidence": (
-                    None
-                    if all(
-                        str(row.get("confidence", "")).strip() in ("", "Not available")
-                        for row in filtered
-                    )
-                    else st.column_config.TextColumn("Confidence", width="small")
-                ),
-                "Policy ID": st.column_config.TextColumn("Policy ID", width="medium"),
-            },
-            key="exceptions_table",
-            on_select="rerun",
-            selection_mode="single-row",
-        )
-        filtered_ids = [str(row.get("policy_id", "")) for row in filtered]
-        selected_rows = list(table_event.selection.rows)
-        selected_from_table = selected_policy_id(filtered, selected_rows)
-        if selected_from_table in filtered_ids:
-            st.session_state.exception_detail_id = selected_from_table
-        current_id = st.session_state.get("exception_detail_id", "")
-        default_index = filtered_ids.index(current_id) if current_id in filtered_ids else 0
-        selected_id = st.selectbox(
-            "Exception detail",
-            filtered_ids,
-            index=default_index,
-            key="exception_detail_id",
-        )
+        formatted_rows = format_exception_table_rows(filtered)
+        table_rows = [
+            {
+                "Policy ID": row["Policy ID"],
+                "Next action": row["Next action"],
+                "Why flagged": row["Manual review reason"],
+                "Status": row["Verification status"],
+            }
+            for row in formatted_rows
+        ]
+        if filtered:
+            table_identity = repr(
+                (str(profile_path), display_mode, action_filter, verification_filter, filtered)
+            )
+            table_key = "exceptions_table_" + hashlib.sha256(table_identity.encode()).hexdigest()[:16]
+            st.caption("Click a row to open the case.")
+            table_event = st.dataframe(
+                table_rows,
+                width="stretch",
+                hide_index=True,
+                height=36 * (len(table_rows) + 1) + 4,
+                column_config={
+                    "Policy ID": st.column_config.TextColumn("Policy ID", width=150),
+                    "Next action": st.column_config.TextColumn("Next action", width=200),
+                    "Why flagged": st.column_config.TextColumn("Why flagged", width=420),
+                    "Status": st.column_config.TextColumn("Status", width=200),
+                },
+                key=table_key,
+                on_select="rerun",
+                selection_mode="single-row",
+            )
+            selected_rows = list(table_event.selection.rows)
+            index = selected_rows[0] if selected_rows else 0
+            if not isinstance(index, int) or not 0 <= index < len(filtered):
+                index = 0
+        else:
+            st.info("No work items match these filters.")
         if demo_mode:
             try:
                 st.download_button(
@@ -1027,19 +1194,7 @@ with results_tab:
                     if not open_folder(full_path.parent):
                         st.info(f"Open this folder on your computer: {full_path.parent}")
 
-        detail = next(row for row in filtered if str(row.get("policy_id", "")) == selected_id)
-        left, right = st.columns(2)
-        left.markdown("**Suggested address**")
-        left.write(_format_address(detail.get("suggestion")))
-        right.markdown("**Why it was flagged**")
-        right.write(detail.get("rationale") or plain_flag_reason(detail.get("manual_review_reason", "")))
-        with st.container(border=True):
-            st.markdown("**Precisely verification**")
-            st.write(_verification_text(detail))
-            st.markdown("**Summary for operations**")
-            st.write(detail.get("narrative", ""))
-        st.info(
-            "AI proposes, Precisely verifies: every suggestion goes to an analyst for review."
-        )
+        if filtered:
+            _render_exception_detail(filtered[index])
 
 app_ui.render_footer()

@@ -7,14 +7,23 @@ gatherUsageStats = false
 
 [theme]
 primaryColor = "#8017E1"
-textColor = "#1F2A37"
+textColor = "#1B1433"
 base = "light"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F6F8FA"
+backgroundColor = "#F7F6FB"
+secondaryBackgroundColor = "#FFFFFF"
 font = "Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif"
 headingFont = "Segoe UI, -apple-system, Helvetica Neue, Arial, sans-serif"
-baseRadius = "8px"
-borderColor = "#E3E8EF"
+baseRadius = "10px"
+borderColor = "#E6E3F0"
+blueColor = "#8017E1"
+blueBackgroundColor = "#F5EFFC"
+blueTextColor = "#39006B"
+greenColor = "#8017E1"
+greenBackgroundColor = "#F5EFFC"
+greenTextColor = "#39006B"
+yellowColor = "#FAB512"
+yellowBackgroundColor = "#FFF4DA"
+yellowTextColor = "#7A5300"
 
 [client]
 toolbarMode = "minimal"

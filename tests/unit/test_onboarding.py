@@ -690,7 +690,7 @@ def test_start_here_and_no_inner_steppers():
     ):
         assert safety_line in start_tab
     assert "Open tab 1 and click \"Use made-up sample client\"" in start_tab
-    assert "enter 300,000 policies and set the verified share to 100%" in start_tab
+    assert "enter the policy count and expected located share" in start_tab
     for question in (
         "What does 'located automatically' mean?",
         "Why is the price a list price?",
@@ -700,14 +700,11 @@ def test_start_here_and_no_inner_steppers():
     ):
         assert question in start_tab
     assert (
-        "An automatically located record has an S8 exact address point or an S5 or S7 placement on the street segment."
+        "The address was located at an exact point or on its street."
         in start_tab
     )
     assert "Live Precisely results. Private screen share only." in source
-    assert (
-        "AI proposes, Precisely verifies: every suggestion goes to an analyst for review."
-        in source
-    )
+    assert "AI proposes, Precisely verifies: every suggestion goes to an analyst for review." not in source
     assert 'header[data-testid="stHeader"] { display:none; height:0; }' in app_ui._GLOBAL_CSS
     assert "padding-top: 16px" in ui_source
     assert "active_step" not in app_ui.__dict__
@@ -789,10 +786,9 @@ def test_wording_and_unmapped_guard_texts():
 
     source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
     for text in (
-        "Default figures come from a reference run on 200 synthetic records; replace them with the client's own results after a sample run.",
-        "the rate seen in our reference run, and should be updated once a sample of the client's own file has been run.",
+        "The address was located at an exact point or on its street.",
         "Whoever maintains the client's address data, often an operations or data quality team.",
-        "Starts at 85% (reference run); replace with the client's own rate after a sample run.",
+        "Replace the initial estimate with the client's own rate after a sample run.",
         "Grouping reflects what Precisely corrected in our reference run: most missing ZIPs were fixed automatically, missing house numbers were not.",
         "Records with this issue",
         "A record can have more than one issue, so the table can add up to more than the file.",
@@ -903,7 +899,7 @@ def test_header_pill_is_neutral_and_mode_independent(monkeypatch):
     app_ui.render_header()
 
     header_html = markdown_calls[0]
-    assert '<div class="ai-mode">Local only</div>' in header_html
+    assert '<div class="ai-mode">Runs on this computer</div>' in header_html
     assert "Made-up examples" not in header_html
     assert "Real results" not in header_html
     assert "ai-mode-real" not in markdown_calls[1]
@@ -912,19 +908,19 @@ def test_header_pill_is_neutral_and_mode_independent(monkeypatch):
 def test_demo_banner_is_rendered_after_measured_kpis():
     source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
     results_tab = source[source.index("with results_tab:"):]
-    assert results_tab.count("· aggregates only") == 1
+    assert "· aggregates only" not in results_tab
     assert "Measured on the 200-record synthetic run" not in results_tab
     assert results_tab.index("From the completed run for") < results_tab.index(
         "_display_kpis(summary_path)"
     )
     assert results_tab.index(
         "_display_kpis(summary_path)"
-    ) < results_tab.index('st.subheader("Exceptions", anchor=False)')
+    ) < results_tab.index('work_heading.subheader("Work list for your analysts", anchor=False)')
     assert (
         "Work list for whoever maintains the client's address data: what to fix, who does it "
         "(customer outreach or analyst review), and whether Precisely confirmed an AI fix."
     ) in results_tab
-    assert results_tab.index('st.subheader("Exceptions", anchor=False)') < results_tab.index(
+    assert results_tab.index('work_heading.subheader("Work list for your analysts", anchor=False)') < results_tab.index(
         'if demo_mode:'
     ) < results_tab.index('st.info("Made-up example data, not Precisely output.")')
 
