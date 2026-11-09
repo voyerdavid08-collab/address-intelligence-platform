@@ -177,7 +177,7 @@ def test_kpi_tile_deltas_are_derived_from_fixture_csv(tmp_path):
     assert tiles[1]["delta"] == "+31 records vs before"
     assert tiles[2]["label"] == "City-level location changes flood-risk tier"
     assert tiles[2]["value"] == "14/39"
-    assert tiles[2]["delta"] == "6 under-, 8 over-priced"
+    assert tiles[2]["delta"] == "6 under-priced, 8 over-priced"
     assert tiles[2]["delta_color"] == "off"
     assert tiles[3]["delta"] == "0 incorrect"
     assert tiles[3]["delta_color"] == "off"
@@ -403,6 +403,62 @@ def test_made_up_workbook_export_contains_only_example_ids(tmp_path):
     assert list(sheet.values)[1][0] == "EXAMPLE-7"
     with pytest.raises(ValueError):
         made_up_exception_workbook([{"policy_id": "CLIENT-7"}])
+
+
+@pytest.mark.parametrize("demo", [True, False])
+def test_workbook_matches_work_list_rows_and_plain_case_details(tmp_path, demo):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    from address_intelligence.app_data import format_sales_worklist_rows, worklist_case_status
+
+    prefix = "EXAMPLE" if demo else "CLIENT"
+    queue = [
+        {
+            "policy_id": f"{prefix}-2", "next_action": "customer_outreach",
+            "verification_status": "verified by Precisely",
+            "input_address": {"address_line1": "12 EXAMPLE ROAD", "city": "Example", "state": "TX", "zip5": "00001"},
+            "suggestion": {"line1": "12 EXAMPLE RD", "city": "Example", "zip5": "00001"},
+            "manual_review_reason": "street-level only", "rationale": "street_name_issue",
+            "narrative": "could not be verified to building level. Flood enrichment was withheld pending address remediation.",
+            "precision_code": "S4", "ai_cause_set": "street_name_issue", "confidence": "0.91",
+        },
+        {"policy_id": f"{prefix}-1", "next_action": "analyst_review", "verification_status": "not applicable"},
+        {"policy_id": f"{prefix}-3", "next_action": "analyst_review", "rationale": "=1+1"},
+        {"policy_id": f"{prefix}-4", "next_action": "analyst_review", "verification_status": "verified by Precisely"},
+        {"policy_id": f"{prefix}-5", "next_action": "analyst_review", "verification_status": "verified by Precisely", "verification": {"verified_incorrect": True}},
+        {"policy_id": f"{prefix}-6", "next_action": "analyst_review", "verification": {"verified_correct": True}},
+    ]
+    if demo:
+        workbook = load_workbook(BytesIO(made_up_exception_workbook(queue)))
+    else:
+        root = tmp_path / "output"
+        workbook = load_workbook(save_real_exception_workbook(queue, root / "client", root))
+    sheet = workbook.active
+    headers = [
+        "Policy ID", "Address on file", "Next action", "Why flagged", "Status",
+        "Suggested address", "What the AI found", "Summary for operations",
+        "Match level", "AI cause", "Confidence",
+    ]
+    assert [cell.value for cell in sheet[1]] == headers
+    assert [cell.value for cell in sheet[2]] == [
+        f"{prefix}-2", "12 EXAMPLE ROAD, Example, TX, 00001", "Customer outreach",
+        "Matched to the street, not the building", "With the customer",
+        "12 EXAMPLE RD, Example 00001", "street name issue",
+        "was located only to the ZIP or city. Flood data is on hold until the address is approved.",
+        "Street (S4)", "Street name", "91%",
+    ]
+    assert sheet["E3"].value == "No AI suggestion"
+    assert [sheet[f"E{index}"].value for index in (5, 6, 7)] == [
+        "Confirmed by Precisely", "Confirmed incorrect", "Confirmed by Precisely",
+    ]
+    assert sheet["B3"].value is None and sheet["F3"].value is None and sheet["K3"].value is None
+    assert sheet["G4"].value == "=1+1" and sheet["G4"].data_type == "s"
+    assert sheet.freeze_panes == "A2" and all(cell.font.bold for cell in sheet[1])
+    assert sheet["B2"].alignment.wrap_text and sheet["G2"].alignment.wrap_text and sheet["H2"].alignment.wrap_text
+    assert sheet.column_dimensions["G"].width >= 12
+    for source, expected, actual in zip(queue, format_sales_worklist_rows(queue), list(sheet.values)[1:]):
+        expected["Status"] = worklist_case_status(source, expected["Status"])
+        assert [value or "" for value in actual] == [expected[header] for header in headers]
 
 
 def test_real_mode_with_missing_files_does_not_show_made_up_rows(tmp_path):

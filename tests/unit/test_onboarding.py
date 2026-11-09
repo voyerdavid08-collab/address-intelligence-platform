@@ -28,6 +28,7 @@ from address_intelligence.onboarding import (
     fraction_value,
     friendly_label,
     cost_breakdown,
+    rollout_cost_breakdown,
     preflight_checks,
     preflight_group_summaries,
     read_excel_workbook,
@@ -597,6 +598,109 @@ def test_cost_breakdown_prices_whole_calls_and_total_matches_displayed_rows():
     assert 'st.markdown(f"**Total: {credit_total} credits**")' in streamlit_source
 
 
+@pytest.mark.parametrize(
+    ("include_av", "rate", "total", "day_one"),
+    [
+        (True, "9.33", "2799000", "2439000"),
+        (False, "9.00", "2700000", "2340000"),
+    ],
+)
+def test_rollout_full_book_and_phases_exclude_preciselyid(
+    include_av, rate, total, day_one
+):
+    profile = build_profile(
+        "Sample", "sample", _map_for_sample(),
+        {name: True for name in (
+            "flood_by_location", "distance_to_flood_hazard_by_location",
+            "property_attributes_v2", "preciselyid_by_address",
+        )},
+    )
+    estimate = rollout_cost_breakdown(profile, 300_000, 0.85, include_av)
+    assert estimate["credits_per_policy"] == Decimal(rate)
+    assert estimate["total_credits"] == Decimal(total)
+    assert estimate["day_one_credits"] == Decimal(day_one)
+    assert estimate["after_credits"] == Decimal("360000")
+    assert estimate["located_calls"] == 255_000
+    assert estimate["remaining_calls"] == 45_000
+    assert estimate["enabled_item_rate"] == Decimal("8")
+    assert estimate["list_price_usd"] == Decimal(total) / 100
+    assert estimate["day_one_credits"] + estimate["after_credits"] == estimate["total_credits"]
+    items = estimate["rows"][:-1]
+    assert all(row["Calls"] == 300_000 for row in items)
+    assert all(row["Credits"] == row["Calls"] * row["Credits each"] for row in items)
+    assert sum(row["Credits"] for row in items) == estimate["rows"][-1]["Credits"] == estimate["total_credits"]
+    assert all(row["Item"] != "PreciselyID" for row in items)
+    assert items[0]["Item"] == "Geocoding (location)"
+    assert any(row["Item"] == "Address Verification (mail delivery)" for row in items) == include_av
+    assert profile["enrichment"]["preciselyid_by_address"]["enabled"]
+
+
+@pytest.mark.parametrize(
+    ("policies", "share", "located", "day_one", "after"),
+    [
+        (3, 0.5, 2, "19.99", "8"),
+        (3, 0, 0, "3.99", "24"),
+        (3, 1, 3, "27.99", "0"),
+        (0, 0.5, 0, "0", "0"),
+    ],
+)
+def test_rollout_rounds_located_calls_half_up_once(policies, share, located, day_one, after):
+    profile = build_profile(
+        "Sample", "sample", _map_for_sample(),
+        ["flood_by_location", "distance_to_flood_hazard_by_location", "property_attributes_v2"],
+    )
+    estimate = rollout_cost_breakdown(profile, policies, share)
+    assert estimate["located_calls"] == located
+    assert estimate["remaining_calls"] == policies - located
+    assert estimate["day_one_credits"] == Decimal(day_one)
+    assert estimate["after_credits"] == Decimal(after)
+    assert estimate["total_credits"] == Decimal(day_one) + Decimal(after)
+    if not policies:
+        assert estimate["credits_per_policy"] == 0
+
+
+def test_rollout_uses_enabled_profile_operations_and_defaults_av_on():
+    profile = build_profile(
+        "Sample", "sample", _map_for_sample(),
+        {"flood_by_location": False, "property_attributes_v2": True,
+         "preciselyid_by_address": True},
+    )
+    estimate = rollout_cost_breakdown(profile, 10, 0.25)
+    assert [row["Item"] for row in estimate["rows"]] == [
+        "Geocoding (location)", "Address Verification (mail delivery)", "Property attributes", "Total",
+    ]
+    assert estimate["enabled_item_rate"] == 1
+    assert estimate["total_credits"] == Decimal("23.30")
+    assert estimate["day_one_credits"] == Decimal("16.30")
+    assert estimate["after_credits"] == 7
+
+
+def test_rollout_share_changes_phasing_not_full_book_total():
+    profile = build_profile(
+        "Sample", "sample", _map_for_sample(),
+        ["flood_by_location", "distance_to_flood_hazard_by_location", "property_attributes_v2"],
+    )
+    earlier = rollout_cost_breakdown(profile, 300_000, 0.70)
+    later = rollout_cost_breakdown(profile, 300_000, 0.85)
+    assert earlier["total_credits"] == later["total_credits"] == Decimal("2799000")
+    assert later["day_one_credits"] - earlier["day_one_credits"] == Decimal("360000")
+    assert earlier["after_credits"] - later["after_credits"] == Decimal("360000")
+    assert later["day_one_credits"] / later["total_credits"] == Decimal("2439000") / Decimal("2799000")
+
+
+@pytest.mark.parametrize(
+    ("policies", "share", "av"),
+    [(-1, 0.5, True), (1.5, 0.5, True), (True, 0.5, True),
+     (1, -0.01, True), (1, 1.01, True), (1, float("nan"), True),
+     (1, float("inf"), True), (1, True, True), (1, "0.5", True),
+     (1, 0.5, 1)],
+)
+def test_rollout_rejects_invalid_planning_inputs(policies, share, av):
+    profile = build_profile("Sample", "sample", _map_for_sample())
+    with pytest.raises(ValueError):
+        rollout_cost_breakdown(profile, policies, share, av)
+
+
 def test_results_chart_spec_uses_full_names_integer_ticks_and_title():
     rows = [
         {"Defect": "Non-existent address", "Before": 0, "After": 2},
@@ -788,7 +892,7 @@ def test_wording_and_unmapped_guard_texts():
     for text in (
         "The address was located at an exact point or on its street.",
         "Whoever maintains the client's address data, often an operations or data quality team.",
-        "Replace the initial estimate with the client's own rate after a sample run.",
+        "The sample run located",
         "Grouping reflects what Precisely corrected in our reference run: most missing ZIPs were fixed automatically, missing house numbers were not.",
         "Records with this issue",
         "A record can have more than one issue, so the table can add up to more than the file.",

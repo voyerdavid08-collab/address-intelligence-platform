@@ -25,6 +25,7 @@ def test_result_views_use_selected_client_data_and_keep_mode_protection(monkeypa
         run_dir=tmp_path,
         reports_dir=tmp_path,
         data={"client": {"name": "Example Insurer"}},
+        column_mapping={"policy_id": "policy_id"},
     )
     monkeypatch.setattr(client_profile, "load_client_profile", lambda *args, **kwargs: profile)
     metrics = [
@@ -77,7 +78,7 @@ def test_result_views_use_selected_client_data_and_keep_mode_protection(monkeypa
     assert "Precisely checks" in html and "Analysts decide" in html
     assert any("Live Precisely results. Private screen share only." in item.value for item in app.warning)
     assert any(
-        list(frame.value.columns) == ["Policy ID", "Next action", "Why flagged", "Status"]
+        list(frame.value.columns) == ["Policy ID", "Address on file", "Next action", "Why flagged", "Status"]
         for frame in app.dataframe
     )
     assert "AI suggested" in html
@@ -137,6 +138,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     profile = SimpleNamespace(
         input_path=tmp_path / "input.csv", run_dir=tmp_path, reports_dir=tmp_path,
         data={"client": {"name": "Selection Insurer"}},
+        column_mapping={"policy_id": "policy_id"},
     )
     queue = [
         {
@@ -145,7 +147,8 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
             "verification_status": "verified by Precisely",
             "suggestion": {"line1": "1 Example St", "city": "Example"},
             "manual_review_reason": "street-level only",
-            "narrative": "Review before contacting the customer.",
+            "rationale": "Possible street_name_issue needs review.",
+            "narrative": "The address could not be verified to building level. Flood enrichment was withheld pending address remediation.",
             "precision_code": "S4", "ai_cause_set": "street_name_issue", "confidence": "0.91",
         },
         {
@@ -185,11 +188,15 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
         return None
 
     assert "<strong>Policy ID: A</strong>" in markup()
-    assert "ai-case-status" in markup() and "Confirmed</span>" in markup()
+    assert "ai-case-status" in markup() and "Confirmed by Precisely</span>" in markup()
     assert any(item.value == "Click a row to open the case." for item in app.caption)
     panels = next(item.value for item in app.markdown if 'class="ai-case-panels"' in item.value)
-    assert "Suggested address" in panels and "Why flagged" in panels and "Summary for operations" in panels
-    assert "repeat(3,minmax(0,1fr))" in panels and panels.count('class="ai-case-panel"') == 3
+    assert "Suggested address" in panels and "What the AI found" in panels and "Summary for operations" in panels
+    assert "Possible street name issue needs review." in panels
+    assert "The address was located only to the ZIP or city. Flood data is on hold until the address is approved." in panels
+    assert "repeat(2,minmax(0,1fr))" in panels and panels.count('class="ai-case-panel"') == 3
+    assert panels.count("grid-column:1 / -1;") == 1
+    assert panels.index("grid-column:1 / -1;") > panels.index("What the AI found")
     assert "#F5EFFC" in panels and panels.count("#FFFFFF") == 2
     assert "**Precisely verification**" not in markup()
     assert "AI proposes, Precisely verifies: every suggestion goes to an analyst for review." not in markup()
@@ -197,6 +204,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert technical.proto.expanded is False
     technical_html = "\n".join(item.value for item in technical.markdown)
     assert "repeat(3,minmax(0,1fr))" in technical_html
+    assert "grid-column:1 / -1;" not in technical_html
     assert "@media(max-width:600px)" in technical_html
     for label in ("Match level", "AI cause", "Confidence"):
         assert label in technical_html
@@ -208,6 +216,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert flow.index("AI suggested") < flow.index("Precisely confirmed") < flow.index("Analyst decides")
     assert flow.count('aria-hidden="true">→</span>') == 2
     assert "color:#1B1433" in flow
+    assert "background:transparent;border:1px solid #8017E1" in flow
     action_filter = next(item for item in app.selectbox if item.label == "Filter by next action")
     verification_filter = next(item for item in app.selectbox if item.label == "Filter by verification status")
     show = next(item for item in app.radio if item.label == "Show:")
@@ -239,33 +248,35 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     queue[:] = [queue[2], queue[0], queue[1], queue[3]]
     app.run(timeout=30)
     assert not app.exception
-    assert work_table().key != old_key
-    assert list(work_table().value["Policy ID"]) == ["C", "A", "B", "D"]
-    assert "<strong>Policy ID: C</strong>" in markup()
+    assert work_table().key == old_key
+    assert list(work_table().value["Policy ID"]) == ["A", "B", "C", "D"]
+    assert "<strong>Policy ID: B</strong>" in markup()
 
     queue[:] = original_order
     app.run(timeout=30)
     assert not app.exception
-    assert "<strong>Policy ID: A</strong>" in markup()
+    assert "<strong>Policy ID: B</strong>" in markup()
 
     app.session_state[work_table().key] = {"selection": {"rows": [3], "columns": [], "cells": []}}
     app.run(timeout=30)
     assert not app.exception
     assert "<strong>Policy ID: D</strong>" in markup()
     assert "**Precisely verification**" not in markup()
-    assert "ai-case-status" not in markup() and 'class="ai-case-panels"' not in markup()
+    assert "With the customer</span>" in markup() and 'class="ai-case-panels"' not in markup()
     assert 'class="ai-case-flow"' not in markup()
 
     next(item for item in app.selectbox if item.label == "Filter by next action").set_value("customer_outreach")
     app.run(timeout=30)
     assert not app.exception
     assert list(work_table().value["Policy ID"]) == ["C", "D"]
+    assert list(work_table().value["Status"]) == ["With the customer", "With the customer"]
     assert "<strong>Policy ID: C</strong>" in markup()
-    assert "Confirmed incorrect" in markup()
+    assert "With the customer</span>" in markup()
     flow = next(item.value for item in app.markdown if 'class="ai-case-flow"' in item.value)
     assert "Precisely confirmed" not in flow and "AI suggested" in flow
     panels = next(item.value for item in app.markdown if 'class="ai-case-panels"' in item.value)
     assert "repeat(2,minmax(0,1fr))" in panels
+    assert "grid-column:1 / -1;" not in panels
 
     next(item for item in app.selectbox if item.label == "Filter by verification status").set_value("not_started")
     app.run(timeout=30)
@@ -285,8 +296,8 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert not app.exception
     assert any("Live Precisely results. Private screen share only." in item.value for item in app.warning)
     assert not app.download_button
-    assert any(item.label == "Save work list (Excel)" for item in app.button)
-    save_button = next(item for item in app.button if item.label == "Save work list (Excel)")
+    assert any(item.label == "Save work list to the client folder" for item in app.button)
+    save_button = next(item for item in app.button if item.label == "Save work list to the client folder")
     detail = next(
         container for container in app.container
         if any("<strong>Policy ID: B</strong>" in item.value for item in container.markdown)
