@@ -1,6 +1,7 @@
 """Read-only local data access for the Streamlit results and exceptions tabs."""
 
 import csv
+from copy import copy
 from decimal import Decimal, InvalidOperation
 from html import escape
 from io import BytesIO
@@ -677,6 +678,11 @@ def _exception_workbook_bytes(rows: list[dict[str, str]]) -> bytes:
                 "What the AI found", "Summary for operations", "AI cause",
             }:
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
+    for row in sheet.iter_rows():
+        for cell in row:
+            alignment = copy(cell.alignment)
+            alignment.vertical = "center"
+            cell.alignment = alignment
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
     for column in sheet.columns:

@@ -454,7 +454,10 @@ def test_workbook_matches_work_list_rows_and_plain_case_details(tmp_path, demo):
     assert sheet["B3"].value is None and sheet["F3"].value is None and sheet["K3"].value is None
     assert sheet["G4"].value == "=1+1" and sheet["G4"].data_type == "s"
     assert sheet.freeze_panes == "A2" and all(cell.font.bold for cell in sheet[1])
+    assert all(cell.alignment.vertical == "center" for row in sheet.iter_rows() for cell in row)
+    assert all(cell.alignment.horizontal is None for row in sheet.iter_rows() for cell in row)
     assert sheet["B2"].alignment.wrap_text and sheet["G2"].alignment.wrap_text and sheet["H2"].alignment.wrap_text
+    assert not sheet["A2"].alignment.wrap_text
     assert sheet.column_dimensions["G"].width >= 12
     for source, expected, actual in zip(queue, format_sales_worklist_rows(queue), list(sheet.values)[1:]):
         expected["Status"] = worklist_case_status(source, expected["Status"])

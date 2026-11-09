@@ -1209,6 +1209,12 @@ with results_tab:
                     )
                 except ValueError as error:
                     st.error(str(error))
+                except PermissionError:
+                    st.session_state.pop("real_work_list_path", None)
+                    st.warning("The work list is open in Excel. Close it, then save again.")
+                except OSError:
+                    st.session_state.pop("real_work_list_path", None)
+                    st.error("The work list could not be saved. Check that the client folder is available.")
                 else:
                     st.session_state.real_work_list_path = str(saved_path)
             saved_path = st.session_state.get("real_work_list_path")

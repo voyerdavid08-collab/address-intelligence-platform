@@ -351,3 +351,30 @@ def test_export_confirmed_status_matches_case_chip(sales_app, real):
         sheet = load_workbook(BytesIO(sales_app.saved["download"])).active
     assert "Confirmed by Precisely</span>" in markup(app)
     assert sheet["E2"].value == "Confirmed by Precisely"
+
+
+@pytest.mark.parametrize(
+    ("error", "message", "element"),
+    [
+        (PermissionError, "The work list is open in Excel. Close it, then save again.", "warning"),
+        (OSError, "The work list could not be saved. Check that the client folder is available.", "error"),
+    ],
+)
+def test_real_save_io_error_is_reported_without_traceback(sales_app, monkeypatch, error, message, element):
+    app = sales_app.app
+    next(w for w in app.radio if w.label == "Show:").set_value("Real results on this computer").run(timeout=30)
+    next(w for w in app.button if w.label == "Save work list to the client folder").click().run(timeout=30)
+    assert sales_app.saved["path"].is_file()
+    calls = []
+
+    def fail_save(*args):
+        calls.append(args)
+        raise error("private operating system detail")
+
+    monkeypatch.setattr(app_data, "save_real_exception_workbook", fail_save)
+    next(w for w in app.button if w.label == "Save work list to the client folder").click().run(timeout=30)
+    assert not app.exception
+    assert len(calls) == 1
+    assert any(item.value == message for item in getattr(app, element))
+    assert not any("Work list saved to:" in item.value for item in app.success)
+    assert "private operating system detail" not in markup(app)
