@@ -314,9 +314,14 @@ def test_work_path_uses_data_helper_counts(monkeypatch):
     calls = _capture(monkeypatch)
     ui.render_work_path({"total": 100, "queue": 20, "analyst": 7, "remaining": 3})
     assert "<strong>100 → 20</strong>Automated checks" in calls[0]
-    assert "<strong>20 → 7</strong>AI finds the cause" in calls[0]
-    assert "<strong>7 → 3</strong>Precisely checks" in calls[0]
-    assert "<strong>3</strong>Analysts decide" in calls[0]
+    assert "<strong>20 → 7</strong>AI finds the cause; 13 go to the customer" in calls[0]
+    assert "<strong>7 → 3</strong>Precisely checks; 4 fixes ready to approve" in calls[0]
+    assert "<strong>3</strong>Need research. Analysts approve every change" in calls[0]
+    ui.render_work_path({"total": 50, "queue": 30, "analyst": 16, "remaining": 10})
+    assert "<strong>30 → 16</strong>AI finds the cause; 14 go to the customer" in calls[1]
+    assert "<strong>16 → 10</strong>Precisely checks; 6 fixes ready to approve" in calls[1]
+    ui.render_work_path({"total": 0, "queue": 0, "analyst": 0, "remaining": 0})
+    assert "0 go to the customer" in calls[2] and "0 fixes ready to approve" in calls[2]
 
 
 def test_share_chart_uses_redesign_colors():
