@@ -21,6 +21,7 @@ Row-level results are not published here. All measured figures are aggregates.
 | S9 | File check "needs the customer" that went to a person | 10 of 10 | Pre-flight group joined to run eligibility by policy ID, totals only | Local count, Nov 8, 2026 | Measured |
 | S10 | File check "Precisely usually fixes": fixed automatically / went to a person | 14 / 2 of 16 | Same join | Local count, Nov 8, 2026 | Measured |
 | S11 | No visible issue in the file, but went to a person | 18 of 174 | Same join; 10 + 2 + 18 = 30 = S7 | Local count, Nov 8, 2026 | Measured |
+| S12 | Right address (correct building), before and after the run | 138 → 169 of 200 (69.0% → 84.5%) | Against the reference answers | `reports/before_after_summary.csv` | Measured |
 
 S5 records are never described as verified to the building.
 
