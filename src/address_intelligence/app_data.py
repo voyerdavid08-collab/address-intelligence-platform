@@ -2,14 +2,15 @@
 
 import csv
 from decimal import Decimal, InvalidOperation
+from html import escape
 from io import BytesIO
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Iterable, Mapping
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from address_intelligence.onboarding import format_confidence, friendly_label
 
@@ -98,6 +99,159 @@ def work_path(total: int, queue: list[dict[str, Any]]) -> dict[str, int]:
         for row in analyst_rows
     )
     return {"total": total, "queue": len(queue), "analyst": len(analyst_rows), "remaining": len(analyst_rows) - verified}
+
+
+_WORKLIST_ADDRESS_FIELDS = ("address_line1", "address_line2", "city", "state", "zip5")
+_WORD_PATTERN = re.compile(r"\w+", re.UNICODE)
+_SNAKE_CASE_PATTERN = re.compile(r"\b\w+(?:_\w+)+\b")
+
+
+def sort_sales_worklist(queue: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies ordered by analyst-confirmed, other analyst, then outreach.
+
+    Unknown/missing actions follow the known groups.
+    Policy IDs are sorted as text, case-insensitively with a deterministic tie-break.
+    A rejected or explicitly incorrect/not-verified suggestion is never confirmed.
+    """
+    def key(row: Mapping[str, Any]) -> tuple[int, str, str]:
+        action = str(row.get("next_action") or "").strip().casefold()
+        status = str(row.get("verification_status") or "").strip().casefold()
+        verification = row.get("verification")
+        verification = verification if isinstance(verification, Mapping) else {}
+        rejected = (
+            str(row.get("suggestion_status") or "").strip().casefold() == "rejected"
+            or status in {"rejected", "verified incorrect", "did not verify", "not verified"}
+            or verification.get("verified_incorrect") is True
+            or verification.get("not_verified") is True
+        )
+        confirmed = not rejected and (
+            status in {"verified by precisely", "verified correct", "confirmed", "confirmed correct"}
+            or verification.get("verified_correct") is True
+        )
+        group = (
+            0 if action == "analyst_review" and confirmed
+            else 1 if action == "analyst_review"
+            else 2 if action == "customer_outreach"
+            else 3
+        )
+        policy_id = str(row.get("policy_id") or "")
+        return group, policy_id.casefold(), policy_id
+
+    return [dict(row) for row in sorted(queue, key=key)]
+
+
+def sales_worklist_counts(queue: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Count rows by the recorded action, including unclassified rows."""
+    rows = list(queue)
+    analyst = sum(
+        str(row.get("next_action") or "").strip().casefold() == "analyst_review"
+        for row in rows
+    )
+    outreach = sum(
+        str(row.get("next_action") or "").strip().casefold() == "customer_outreach"
+        for row in rows
+    )
+    return {"total": len(rows), "analyst": analyst, "outreach": outreach, "unclassified": len(rows) - analyst - outreach}
+
+
+def sales_worklist_count_line(queue: Iterable[Mapping[str, Any]]) -> str:
+    """Return a display-ready total/analyst/outreach count line."""
+    counts = sales_worklist_counts(queue)
+    unclassified = (
+        f", {counts['unclassified']:,} with no recognised next step"
+        if counts["unclassified"] else ""
+    )
+    return (
+        f"{counts['total']:,} {'address needs' if counts['total'] == 1 else 'addresses need'} a person: "
+        f"{counts['analyst']:,} for your analysts, {counts['outreach']:,} for customer outreach{unclassified}."
+    )
+
+
+def join_sales_worklist_addresses(
+    queue: Iterable[Mapping[str, Any]],
+    input_rows: Iterable[Mapping[str, Any]],
+    column_mapping: Mapping[str, str | None],
+    *,
+    demo: bool = False,
+) -> list[dict[str, Any]]:
+    """Return queue copies with an ``input_address`` canonical-field dictionary.
+
+    Real mode joins source rows on the exact text policy ID using canonical-to-source
+    column_mapping. CSV readers should retain strings to preserve leading zeroes.
+    Blank/missing IDs never match; duplicate nonblank input IDs raise ValueError.
+    Missing fields and unmatched IDs are blank. Demo mode never touches input_rows
+    or the mapping: it uses canonical or raw_* address fields on each example row.
+    No files are read by this helper.
+    """
+    indexed: dict[str, Mapping[str, Any]] = {}
+    if not demo:
+        id_column = column_mapping.get("policy_id")
+        if not id_column:
+            raise ValueError("A policy_id source column is required.")
+        for source in input_rows:
+            policy_id = source.get(id_column)
+            if policy_id is None or str(policy_id) == "":
+                continue
+            policy_id = str(policy_id)
+            if policy_id in indexed:
+                raise ValueError("Duplicate policy IDs in input rows.")
+            indexed[policy_id] = source
+
+    result = []
+    for row in queue:
+        policy_id = row.get("policy_id")
+        source = row if demo else indexed.get(str(policy_id), {}) if policy_id is not None else {}
+        address = {}
+        for field in _WORKLIST_ADDRESS_FIELDS:
+            if demo:
+                value = source.get(field, source.get(f"raw_{field}", ""))
+            else:
+                column = column_mapping.get(field)
+                value = source.get(column, "") if column else ""
+            address[field] = "" if value is None else str(value)
+        result.append({**row, "input_address": address})
+    return result
+
+
+def highlight_changed_words(text: str, original: str) -> str:
+    """Escape text for HTML and mark words absent from original, ignoring case.
+
+    Words are Unicode alphanumeric/underscore runs; punctuation and spacing are
+    retained. Matching is by word occurrence, not position, so reordered words
+    are not highlighted. The only generated markup is <mark>.
+    """
+    from collections import Counter
+
+    remaining = Counter(word.casefold() for word in _WORD_PATTERN.findall(original))
+    parts = []
+    end = 0
+    for match in _WORD_PATTERN.finditer(text):
+        parts.append(escape(text[end:match.start()]))
+        word = match.group()
+        folded = word.casefold()
+        if remaining[folded]:
+            remaining[folded] -= 1
+            parts.append(escape(word))
+        else:
+            parts.append(f"<mark>{escape(word)}</mark>")
+        end = match.end()
+    parts.append(escape(text[end:]))
+    return "".join(parts)
+
+
+def clean_worklist_text(text: str, replacements: Mapping[str, str] | None = None) -> str:
+    """Apply exact, case-sensitive literal phrase replacements and clean snake_case.
+
+    Replacements are applied once simultaneously, longest phrase first; unrelated
+    prose retains its case and whitespace. Empty replacement keys are rejected.
+    This returns plain text, not HTML.
+    """
+    if replacements:
+        if "" in replacements:
+            raise ValueError("Replacement phrases must not be empty.")
+        pattern = re.compile("|".join(re.escape(key) for key in sorted(replacements, key=len, reverse=True)))
+        text = pattern.sub(lambda match: replacements[match.group()], text)
+    return _SNAKE_CASE_PATTERN.sub(lambda match: match.group().replace("_", " "), text)
 
 
 _DEFECT_LABELS = {
@@ -365,6 +519,95 @@ def format_exception_table_rows(
     return formatted
 
 
+SALES_WORKLIST_COLUMNS = (
+    "Policy ID", "Address on file", "Next action", "Why flagged", "Status",
+    "Suggested address", "What the AI found", "Summary for operations",
+    "Match level", "AI cause", "Confidence",
+)
+
+
+def worklist_verification_text(row: Mapping[str, Any]) -> str:
+    verification = row.get("verification", {})
+    if row.get("suggestion_status") == "rejected":
+        return "Rejected"
+    if isinstance(verification, Mapping) and verification.get("verified_correct") is True:
+        return "Confirmed correct"
+    if isinstance(verification, Mapping) and verification.get("verified_incorrect") is True:
+        return "Confirmed incorrect"
+    if (
+        row.get("verification_status") == "did not verify"
+        or isinstance(verification, Mapping) and verification.get("not_verified") is True
+    ):
+        return "Not verified"
+    return friendly_label(str(row.get("verification_status", "not_started")))
+
+
+def worklist_case_status(row: Mapping[str, Any], table_status: str) -> str:
+    verification_details = row.get("verification")
+    available = bool(row.get("verification_status")) or (
+        isinstance(verification_details, Mapping)
+        and any(verification_details.get(key) is True for key in (
+            "verified_correct", "verified_incorrect", "not_verified",
+        ))
+    )
+    verification = worklist_verification_text(row) if available else ""
+    status = verification if verification in {"Confirmed correct", "Confirmed incorrect", "Rejected"} else (
+        table_status or verification
+    )
+    if table_status in {"With the customer", "No AI suggestion"}:
+        status = table_status
+    return "Confirmed by Precisely" if status in {"Confirmed correct", "Confirmed"} else status
+
+
+def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Prepare the same plain-language values for the table, case and workbook."""
+    formatted = format_exception_table_rows(queue)
+    result = []
+    for row, values in zip(queue, formatted):
+        on_file = row.get("input_address") or {}
+        address = ", ".join(
+            str(on_file.get(key) or "").strip()
+            for key in _WORKLIST_ADDRESS_FIELDS if str(on_file.get(key) or "").strip()
+        )
+        suggestion = row.get("suggestion") or {}
+        if not isinstance(suggestion, Mapping):
+            suggestion = {}
+        line = str(suggestion.get("line1") or "").strip()
+        city_zip = " ".join(
+            str(suggestion.get(key) or "").strip()
+            for key in ("city", "zip5") if str(suggestion.get(key) or "").strip()
+        )
+        suggested_address = ", ".join(part for part in (line, city_zip) if part)
+        action = str(row.get("next_action") or "").strip().casefold()
+        verification = str(row.get("verification_status") or "").strip().casefold()
+        status = values["Verification status"] if verification else ""
+        if action == "customer_outreach":
+            status = "With the customer"
+        elif action == "analyst_review" and verification == "not applicable":
+            status = "No AI suggestion"
+        reason = row.get("rationale") or plain_flag_reason(row.get("manual_review_reason") or "")
+        summary = str(row.get("narrative") or "")
+        summary = (summary
+            .replace("could not be verified to building level", "was located only to the ZIP or city")
+            .replace("Flood enrichment was withheld pending address remediation.", "Flood data is on hold until the address is approved.")
+            .replace("Flood enrichment was withheld pending address remediation", "Flood data is on hold until the address is approved."))
+        result.append({
+            "Policy ID": str(row.get("policy_id") or ""),
+            "Address on file": address,
+            "Next action": values["Next action"] if action else "",
+            "Why flagged": values["Manual review reason"] if row.get("manual_review_reason") else "",
+            "Status": status,
+            "Suggested address": suggested_address,
+            "What the AI found": clean_worklist_text(str(reason)),
+            "Summary for operations": summary,
+            **{
+                label: values[label] if row.get(key) is not None and str(row.get(key, "")).strip() else ""
+                for label, key in (("Match level", "precision_code"), ("AI cause", "ai_cause_set"), ("Confidence", "confidence"))
+            },
+        })
+    return result
+
+
 def format_suggestion_status(value: Any) -> str:
     status = str(value).strip().casefold()
     return {
@@ -405,20 +648,35 @@ def format_cost_breakdown_rows(
 def made_up_exception_workbook(queue: list[dict[str, Any]]) -> bytes:
     if any(not str(row.get("policy_id", "")).startswith("EXAMPLE-") for row in queue):
         raise ValueError("Made-up workbook export only accepts EXAMPLE policy IDs.")
-    return _exception_workbook_bytes(format_exception_table_rows(queue))
+    return _exception_workbook_bytes(_workbook_rows(queue))
+
+
+def _workbook_rows(queue: list[dict[str, Any]]) -> list[dict[str, str]]:
+    rows = format_sales_worklist_rows(queue)
+    for source, row in zip(queue, rows):
+        row["Status"] = worklist_case_status(source, row["Status"])
+    return rows
 
 
 def _exception_workbook_bytes(rows: list[dict[str, str]]) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Work list"
-    headers = [header for header, _ in EXCEPTION_EXPORT_COLUMNS]
+    headers = SALES_WORKLIST_COLUMNS
     sheet.append(headers)
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill(fill_type="solid", fgColor="0B2341")
     for row in rows:
         sheet.append([row.get(header, "") for header in headers])
+        for cell in sheet[sheet.max_row]:
+            if cell.value is not None:
+                cell.data_type = "s"
+            if headers[cell.column - 1] in {
+                "Address on file", "Why flagged", "Suggested address",
+                "What the AI found", "Summary for operations", "AI cause",
+            }:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
     for column in sheet.columns:
@@ -469,7 +727,7 @@ def save_real_exception_workbook(
     destination = safe_exception_export_path(run_dir, data_output_root)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(
-        _exception_workbook_bytes(format_exception_table_rows(queue))
+        _exception_workbook_bytes(_workbook_rows(queue))
     )
     return destination
 

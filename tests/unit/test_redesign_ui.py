@@ -195,6 +195,8 @@ def test_work_path_and_kpis_escape_inputs(monkeypatch):
 @pytest.mark.parametrize(
     ("term", "description"),
     [
+        ("Day one", "Address checks for every policy, plus flood and property data for the policies located at once."),
+        ("After corrections", "Flood and property data for the remaining policies, once the team or the customer corrects them."),
         ("Needs client follow-up", "Information only the customer can give, such as a missing house number."),
         ("Precisely usually fixes", "Issues such as a missing ZIP, which were usually corrected automatically in our reference run."),
         ("Review", "Issues a person should look at."),

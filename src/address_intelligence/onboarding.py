@@ -293,7 +293,7 @@ def cost_breakdown(
         rows.append(
             {
                 "Item": operation_labels[operation],
-                "Applies to": "Verified policies only",
+                "Applies to": "Located policies only",
                 "Calls": displayed_calls,
                 "Credits each": rate,
                 "Credits": displayed_calls * rate,
@@ -317,6 +317,91 @@ def cost_breakdown(
         "total_credits": total_credits,
         "credits_per_policy": total_credits / Decimal(policies) if policies else Decimal("0"),
         "enabled_item_rate": enabled_rate,
+    }
+
+
+def rollout_cost_breakdown(
+    profile_data: dict[str, Any],
+    policies: int,
+    located_share: float,
+    include_address_verification: bool = True,
+) -> dict[str, Any]:
+    """Estimate a full-book rollout, with enrichment phased by located share.
+
+    The profile controls the three location/property operations; PreciselyID is
+    excluded. Address Verification is a separate planning option, not a profile
+    or pipeline setting. Located calls are rounded half up to whole policies.
+    """
+    if isinstance(policies, bool) or not isinstance(policies, int) or policies < 0:
+        raise ValueError("policies must be a non-negative integer.")
+    if isinstance(located_share, bool) or not isinstance(located_share, (int, float, Decimal)):
+        raise ValueError("located_share must be between 0 and 1.")
+    share = Decimal(str(located_share))
+    if not share.is_finite() or not 0 <= share <= 1:
+        raise ValueError("located_share must be between 0 and 1.")
+    if not isinstance(include_address_verification, bool):
+        raise ValueError("include_address_verification must be a boolean.")
+
+    profile = ClientProfile(
+        path=PROJECT_ROOT / "profile-in-memory.yaml",
+        project_root=PROJECT_ROOT,
+        data=profile_data,
+    )
+    located_calls = (Decimal(policies) * share).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
+    remaining_calls = Decimal(policies) - located_calls
+    labels = {
+        "flood_by_location": "Flood zone and risk",
+        "distance_to_flood_hazard_by_location": "Distance to flood hazard",
+        "property_attributes_v2": "Property attributes",
+    }
+    rows = []
+
+    def add_row(label: str, operation: str) -> None:
+        rate = PRICE_TABLE[operation]
+        rows.append(
+            {
+                "Item": label,
+                "Applies to": "Every policy",
+                "Calls": Decimal(policies),
+                "Credits each": rate,
+                "Credits": Decimal(policies) * rate,
+            }
+        )
+
+    add_row("Geocoding (location)", "geocode_premium")
+    if include_address_verification:
+        add_row("Address Verification (mail delivery)", "address_verification_uscan")
+    enabled_operations = [
+        operation for operation in profile.enabled_operations if operation in labels
+    ]
+    for operation in enabled_operations:
+        add_row(labels[operation], operation)
+
+    enabled_rate = sum((PRICE_TABLE[op] for op in enabled_operations), Decimal("0"))
+    total_credits = sum((row["Credits"] for row in rows), Decimal("0"))
+    after_credits = remaining_calls * enabled_rate
+    day_one_credits = total_credits - after_credits
+    rows.append(
+        {
+            "Item": "Total",
+            "Applies to": "",
+            "Calls": "",
+            "Credits each": "",
+            "Credits": total_credits,
+        }
+    )
+    return {
+        "rows": rows,
+        "total_credits": total_credits,
+        "credits_per_policy": total_credits / Decimal(policies) if policies else Decimal("0"),
+        "enabled_item_rate": enabled_rate,
+        "located_calls": located_calls,
+        "remaining_calls": remaining_calls,
+        "day_one_credits": day_one_credits,
+        "after_credits": after_credits,
+        "list_price_usd": total_credits * Decimal("0.01"),
     }
 
 
