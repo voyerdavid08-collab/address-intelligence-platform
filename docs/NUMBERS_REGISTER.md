@@ -113,11 +113,11 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 | B7 | Mailings per policy per year | 4 | Renewal, billing, notices | Planning estimate | Assumed |
 | B8 | Undeliverable mail rate | 4.3% | Share of USPS volume, FY2014 (6.6 billion pieces); also 4.3% in FY2013 | [USPS OIG MS-MA-15-006](https://www.oversight.gov/sites/default/files/oig-reports/MS-MA-15-006.pdf) | Sourced |
 | B9 | Cost per undeliverable piece | $2 | Within a $1–3 trade-press estimate from unnamed industry experts | [Mailing Systems Technology](https://mailingsystemstechnology.com/print-article-4191-permanent.html) | Assumed |
-| B10 | Undeliverable mail attributed to business mailers | 35% | Report p. 12: "business mailers (35 percent)"; "Much of the 35 percent" is insufficient addressing. Moves are the largest cause (public 40%) and verification does not fix moves | [USPS OIG MS-MA-15-006](https://www.oversight.gov/sites/default/files/oig-reports/MS-MA-15-006.pdf) | Sourced |
+| B10 | Undeliverable mail attributed to business mailers | 35% | Report p. 12: "business mailers (35 percent)"; "Much of the 35 percent" is insufficient addressing. Moves are the largest cause (public 40%) and verification does not fix moves. The report attributes the 35% to a 2006 joint study | [USPS OIG MS-MA-15-006](https://www.oversight.gov/sites/default/files/oig-reports/MS-MA-15-006.pdf) | Sourced |
 | B11 | Homes filing a claim each year | 5% | Rounded down from 5.3% in 2023 | [Triple-I](https://www.iii.org/fact-statistic/facts-statistics-homeowners-and-renters-insurance) | Sourced |
 | B12 | Cost to re-route a claim | $50 | Midpoint of $40–60, no named source | Planning estimate | Assumed |
 | B13 | Claims re-routing avoided | 31 of 76 (41%) | Flawed records fully corrected by processing; excludes the 6 already correct | `breakdown.md` | Assumed, from a measured share |
-| B14 | Proxy for the yearly flow of new and changed addresses (carrier confirms) | 11.8% = 35,400 | US movers, 2024 | [Census ACS 1-year](https://www.census.gov/topics/population/migration/guidance/acs-1yr.html) | Sourced |
+| B14 | Proxy for the yearly flow of new and changed addresses (carrier confirms) | 11.8% = 35,400 | US movers, 2024: 1 − "same house 1 year ago" ÷ population aged 1 and over. Press summaries round it to 11% | [Census ACS 2024 1-year, table B07001](https://data.census.gov/table/ACSDT1Y2024.B07001); corroborated by a [Census-sourced chart](https://www.mississippifreepress.org/wp-content/uploads/2026/10/Percentage-of-Population-that-Moved-in-the-Past-Year_source-US-Census-Bureau.pdf) | Sourced |
 | B15 | Flawed addresses needing work each year without entry checks | ≈4,891 | 35,400 × 15% × 70/76 | Calculated | Assumed |
 | B16 | Credits per policy | 9.33 | Geocode 1, flood 5, water 2, year built 1, USCAN 0.33. Enrichment applied to all 300,000 (conservative). Separate ID lookup dropped: PB_KEY came back on the same 39 records | `src/address_intelligence/credits.py`, `breakdown.md` | Measured prices |
 | B17 | Credit value | $0.01 | API list price, illustrative; enterprise subscription quoted in the proposal; risk-use fees excluded | `docs/API_DISCOVERY.md` | Sourced |
@@ -134,6 +134,7 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 | C3 | Re-routed claims | $112,500 a year | 45,000 × 5% × $50 | Assumed |
 | C4 | New flawed addresses, staff time | ≈$57,059 a year | ≈4,891 × $11.67 | Assumed |
 | C5 | **Ongoing cost** | **≈$272,759 a year** | C2 + C3 + C4 | Assumed |
+| C6 | Backlog at book scale: customer contacts / research cases | ≈21,000 / ≈15,000 | 45,000 × 14/30; 45,000 × 10/30. Worked by priority over time, not at once | Assumed |
 
 ## 8. Cost and return
 
@@ -152,6 +153,7 @@ Run-rate savings start at go-live. Flood value and the backlog cleanup are exclu
 | V9 | **Payback** | **≈12 months after go-live** | V7 ÷ ((V4 − V8) ÷ 12) = 11.6 |
 | V10 | **Three-year net** | **≈$214,633** | 3 × (V4 − V8) − V7, years counted from go-live |
 | V11 | **Annual return once running** | **≈11×** | V4 ÷ V8; 7.7× on mail and claims alone |
+| V12 | Payback if data costs 3× list price | ≈19 months | (27,990 × 3 + 74,000) ÷ ((116,244 − (3,303 × 3 + 7,400)) ÷ 12) = 19.2 |
 
 **Backlog option, shown separately:** clearing the backlog by hand costs ≈$483,553. With Precisely, ≈$193,421 of work remains. That ≈$290,132 difference is value only if the carrier would otherwise do this work.
 
@@ -167,6 +169,7 @@ Conditional and illustrative. It applies only if policies are placed at a ZIP's 
 | D4 | Example uncollected premium per 1,000 policies | $150,000 a year | D1 × D3 | Illustrative |
 | D5 | Private share of flood policies | Commercial 23% → 48%; residential 6% → 11%, 2018 to 2025 | By policy count | Sourced: [GAO-27-108012](https://www.gao.gov/products/gao-27-108012) |
 | D6 | NFIP premiums no longer use flood zones | Risk Rating 2.0 | Property-specific rating | Sourced: [CRS IN11777](https://www.everycrsreport.com/reports/IN11777.html) |
+| D7 | Most homeowners insurance does not cover flood | Policy fact | Standard homeowners policies exclude flood | Sourced: [FEMA, flood insurance](https://www.fema.gov/flood-insurance) |
 
 ## 10. Pilot
 
