@@ -49,7 +49,7 @@ def test_results_fractions_and_unavailable_denominator(monkeypatch):
     calls = _capture(monkeypatch)
     ui.render_results_band("2/4", "3/4")
     assert "75.0%" in calls[0]
-    assert '<div class="ai-results-sub">right address</div>' in calls[0]
+    assert '<div class="ai-results-sub">right address<span class="ai-help">' in calls[0]
     assert "After share" not in calls[0]
     assert "width:50.00%" in calls[0]
     assert "width:75.00%" in calls[0]
@@ -190,6 +190,88 @@ def test_work_path_and_kpis_escape_inputs(monkeypatch):
     ui.render_kpi_row([{"label": "<label>", "value": "<value>", "delta": "change", "tone": 'x"'}])
     assert "&lt;label&gt;" in calls[1] and "&lt;value&gt;" in calls[1]
     assert 'x&quot;' in calls[1]
+
+
+@pytest.mark.parametrize(
+    ("term", "description"),
+    [
+        ("Needs client follow-up", "Information only the customer can give, such as a missing house number."),
+        ("Precisely usually fixes", "Issues such as a missing ZIP, which were usually corrected automatically in our reference run."),
+        ("Review", "Issues a person should look at."),
+        ("No issues found", "No problem visible in the file. The full run can find issues a file check cannot see."),
+        ("Right address", "Share of records that point to the correct building, measured against the reference answers."),
+        ("Flawed records fully corrected", "Records that started with a known error and now match the reference answer in full, including the unit."),
+        ("City-level location changes flood-risk tier", "Properties with an exact location that land in a different flood tier when placed at city level. Under-priced means the tier was too low. Over-priced means it was too high."),
+        ("AI fixes verified", "AI suggestions that Precisely checked and confirmed."),
+        ("Match level", "How closely the address was placed: building, street, or ZIP and city."),
+        ("AI cause", "What the AI found as the likely cause of the problem."),
+        ("Confidence", "How often the AI reached the same cause across repeat checks. It does not measure whether the address is right."),
+    ],
+)
+def test_help_terms_have_exact_text_and_accessible_icon(term, description):
+    assert ui.HELP_TEXT[term] == description
+    html = ui.help_icon_html(term)
+    assert description in html
+    assert '<button type="button"' in html
+    assert f'aria-label="Help: {term}"' in html
+    tooltip_id = html.split('aria-describedby="', 1)[1].split('"', 1)[0]
+    assert f'id="{tooltip_id}" class="ai-help-tooltip" role="tooltip"' in html
+    assert 'aria-hidden="true"' in html
+
+
+def test_help_icons_are_unique_keyboard_accessible_and_icon_anchored():
+    first = ui.help_icon_html("Confidence")
+    second = ui.help_icon_html("Confidence")
+    assert first != second
+    assert ".ai-help:focus-within .ai-help-tooltip" in ui._GLOBAL_CSS
+    assert ".ai-help:hover .ai-help-tooltip" in ui._GLOBAL_CSS
+    tooltip = ui._GLOBAL_CSS.split(".ai-help-tooltip {", 1)[1].split("}", 1)[0]
+    assert "position:absolute" in tooltip and "bottom:calc(100% + 6px)" in tooltip
+    assert "left:50%" in tooltip and "transform:translateX(-50%)" in tooltip
+    assert "position:fixed" not in tooltip and "bottom:16px" not in tooltip
+    assert "max-width:min(320px, calc(100vw - 32px))" in tooltip
+    for style in ("background:#F7F6FB", "color:#1B1433", "font-size:14px",
+                  "line-height:1.6", "padding:6px 12px", "border-radius:10px",
+                  "border:0", "box-shadow:0 1px 4px rgba(0,0,0,.16)"):
+        assert style in tooltip
+    assert ".ai-kpi:first-child .ai-help-tooltip" in ui._GLOBAL_CSS
+    assert ".ai-case-panel:first-child .ai-help-tooltip" in ui._GLOBAL_CSS
+    assert ".ai-kpi:last-child:not(:first-child) .ai-help-tooltip" in ui._GLOBAL_CSS
+    assert ".ai-case-panel:last-child:not(:first-child) .ai-help-tooltip" in ui._GLOBAL_CSS
+    assert "left:0; right:auto; transform:none" in ui._GLOBAL_CSS
+    assert "left:auto; right:0; transform:none" in ui._GLOBAL_CSS
+    assert "overflow:visible" in ui._GLOBAL_CSS
+    assert '[data-testid="stElementContainer"]:has(.ai-help:focus-within)' in ui._GLOBAL_CSS
+    assert "button:focus-visible" in ui._GLOBAL_CSS
+    assert ui.help_icon_html("Unrecognized <label>") == ""
+
+
+def test_dynamic_kpi_labels_add_only_matched_help(monkeypatch):
+    calls = _capture(monkeypatch)
+    labels = [
+        "Needs client follow-up", "Needs customer follow-up", "Precisely usually fixes",
+        "Review", "No issues found", "Right address", "Flawed records fully corrected",
+        "City-level location changes flood-risk tier", "AI fixes verified", "Other",
+    ]
+    ui.render_kpi_row([{"label": label, "value": 1} for label in labels])
+    html = calls[0]
+    assert html.count('class="ai-help-button"') == len(labels) - 1
+    assert f'Other{ui.help_icon_html("Other")}</div>' in html
+    assert html.count(ui.HELP_TEXT["Needs client follow-up"]) == 2
+    for label in labels[2:-1]:
+        assert ui.HELP_TEXT[label] in html
+
+
+def test_preflight_legend_and_reference_results_have_help(monkeypatch):
+    legend = ui.share_bar_html([])
+    for label in ("Needs client follow-up", "Precisely usually fixes", "Review", "No issues found"):
+        assert ui.HELP_TEXT[label] in legend
+    assert legend.count('class="ai-help-button"') == 4
+    calls = _capture(monkeypatch)
+    ui.render_results_band("1/4", "3/4")
+    assert ui.HELP_TEXT["Right address"] in calls[-1]
+    ui.render_results_band("", "3/4")
+    assert ui.HELP_TEXT["Right address"] not in calls[-1]
 
 
 def test_kpi_columns_fill_available_width(monkeypatch):

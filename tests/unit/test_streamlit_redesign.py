@@ -195,8 +195,14 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert "AI proposes, Precisely verifies: every suggestion goes to an analyst for review." not in markup()
     technical = next(item for item in app.expander if item.label == "Technical detail")
     assert technical.proto.expanded is False
-    assert all(f"**{label}**" in "\n".join(item.value for item in technical.markdown)
-               for label in ("Match level", "AI cause", "Confidence"))
+    technical_html = "\n".join(item.value for item in technical.markdown)
+    assert "repeat(3,minmax(0,1fr))" in technical_html
+    assert "@media(max-width:600px)" in technical_html
+    for label in ("Match level", "AI cause", "Confidence"):
+        assert label in technical_html
+    assert technical_html.count('class="ai-help"') == 3
+    assert '[role="tabpanel"] [data-testid="stVerticalBlock"]' in markup()
+    assert "gap: var(--ai-section-spacing) !important" in markup()
     assert all(item.label != "Exception detail" for item in app.selectbox)
     flow = next(item.value for item in app.markdown if 'class="ai-case-flow"' in item.value)
     assert flow.index("AI suggested") < flow.index("Precisely confirmed") < flow.index("Analyst decides")
@@ -204,6 +210,8 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert "color:#1B1433" in flow
     action_filter = next(item for item in app.selectbox if item.label == "Filter by next action")
     verification_filter = next(item for item in app.selectbox if item.label == "Filter by verification status")
+    show = next(item for item in app.radio if item.label == "Show:")
+    assert show.proto.label_visibility.value == 2
     action_column = parent_of(app._tree, action_filter)
     verification_column = parent_of(app._tree, verification_filter)
     assert action_column.type == verification_column.type == "column"

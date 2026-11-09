@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import re
+import uuid
 from decimal import Decimal, DecimalException
 from html import escape
 from pathlib import Path
@@ -34,6 +35,41 @@ COLORS = {
     "danger_tint": "#FDEDEC",
     "before": "#B9B2CC",
 }
+
+HELP_TEXT = {
+    "Needs client follow-up": "Information only the customer can give, such as a missing house number.",
+    "Precisely usually fixes": "Issues such as a missing ZIP, which were usually corrected automatically in our reference run.",
+    "Review": "Issues a person should look at.",
+    "No issues found": "No problem visible in the file. The full run can find issues a file check cannot see.",
+    "Right address": "Share of records that point to the correct building, measured against the reference answers.",
+    "Flawed records fully corrected": "Records that started with a known error and now match the reference answer in full, including the unit.",
+    "City-level location changes flood-risk tier": "Properties with an exact location that land in a different flood tier when placed at city level. Under-priced means the tier was too low. Over-priced means it was too high.",
+    "AI fixes verified": "AI suggestions that Precisely checked and confirmed.",
+    "Match level": "How closely the address was placed: building, street, or ZIP and city.",
+    "AI cause": "What the AI found as the likely cause of the problem.",
+    "Confidence": "How often the AI reached the same cause across repeat checks. It does not measure whether the address is right.",
+}
+
+_HELP_ALIASES = {"Needs customer follow-up": "Needs client follow-up"}
+
+
+def help_icon_html(label: str) -> str:
+    """Return an accessible help icon for a recognized label, otherwise an empty string."""
+    text = HELP_TEXT.get(_HELP_ALIASES.get(label, label))
+    if text is None:
+        return ""
+    tooltip_id = f"ai-help-{uuid.uuid4().hex}"
+    return (
+        '<span class="ai-help">'
+        f'<button type="button" class="ai-help-button" aria-label="Help: {escape(label, quote=True)}" '
+        f'aria-describedby="{tooltip_id}">'
+        '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">'
+        '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-.9-3h1.8v-1.8h-1.8V17zm.9-10a3.1 3.1 0 0 0-3.1 3h1.8a1.3 1.3 0 1 1 2.2 1c-.9.8-1.8 1.3-1.8 2.9h1.8c0-1 .4-1.3 1.2-2a3.1 3.1 0 0 0-2.1-4.9z"/>'
+        '</svg></button>'
+        f'<span id="{tooltip_id}" class="ai-help-tooltip" role="tooltip">{escape(text)}</span>'
+        '</span>'
+    )
+
 
 _GLOBAL_CSS = f"""
 <style>
@@ -78,6 +114,37 @@ h1, h2, h3, h4, [data-testid="stHeadingWithActionElements"] {{
 button:focus-visible, input:focus-visible, textarea:focus-visible,
 [role="combobox"]:focus-visible {{
   outline: 3px solid var(--ai-brand) !important; outline-offset: 2px;
+}}
+.ai-help {{ position:relative; display:inline-block; vertical-align:middle; margin-left:4px; line-height:1; }}
+.ai-help-button {{
+  display:inline-flex; align-items:center; justify-content:center; padding:0; border:0;
+  background:transparent; color:inherit; opacity:.75; cursor:help; vertical-align:middle;
+}}
+.ai-help-button:hover, .ai-help-button:focus-visible {{ opacity:1; }}
+.ai-help-tooltip {{
+  display:none; position:absolute; z-index:9999; bottom:calc(100% + 6px); left:50%;
+  transform:translateX(-50%); box-sizing:border-box; width:max-content;
+  max-width:min(320px, calc(100vw - 32px)); max-height:calc(100vh - 32px);
+  overflow:auto; padding:6px 12px; border:0; border-radius:10px; background:#F7F6FB;
+  color:#1B1433; font-size:14px; font-weight:400; line-height:1.6;
+  text-align:left; white-space:normal; box-shadow:0 1px 4px rgba(0,0,0,.16);
+}}
+.ai-help:hover .ai-help-tooltip, .ai-help:focus-within .ai-help-tooltip {{ display:block; }}
+.ai-kpi:first-child .ai-help-tooltip, .ai-case-panel:first-child .ai-help-tooltip,
+.ai-share-legend-item:first-child .ai-help-tooltip, .ai-results-band .ai-help-tooltip {{
+  left:0; right:auto; transform:none;
+}}
+.ai-kpi:last-child:not(:first-child) .ai-help-tooltip,
+.ai-case-panel:last-child:not(:first-child) .ai-help-tooltip,
+.ai-share-legend-item:last-child .ai-help-tooltip {{
+  left:auto; right:0; transform:none;
+}}
+.ai-kpi, .ai-case-panel, .ai-results-band, .ai-share-legend-item {{ overflow:visible; }}
+.ai-kpi:has(.ai-help:hover), .ai-kpi:has(.ai-help:focus-within),
+.ai-case-panel:has(.ai-help:hover), .ai-case-panel:has(.ai-help:focus-within),
+[data-testid="stElementContainer"]:has(.ai-help:hover),
+[data-testid="stElementContainer"]:has(.ai-help:focus-within) {{
+  position:relative; z-index:10;
 }}
 [data-testid="stVerticalBlockBorderWrapper"] {{
   border-color: var(--ai-border); border-radius: var(--ai-radius);
@@ -280,7 +347,7 @@ def render_kpi_row(cards: list[dict[str, Any]], *, columns: int | None = None) -
         caption_html = f'<span class="ai-kpi-caption">{escape(str(caption))}</span>'
         html_cards.append(
             f'<div class="ai-kpi" style="--ai-card-color:{accents.get(str(card["label"]), COLORS["brand"])}">'
-            f'<div class="ai-kpi-label">{escape(str(card["label"]))}</div>'
+            f'<div class="ai-kpi-label">{escape(str(card["label"]))}{help_icon_html(str(card["label"]))}</div>'
             f'<div class="ai-kpi-value">{escape(str(card["value"]))}</div>'
             f'<div class="ai-kpi-bottom"><div>{delta_html}</div>{caption_html}</div>'
             "</div>"
@@ -370,7 +437,7 @@ def share_bar_html(shares: list[dict[str, Any]]) -> str:
     legend = "".join(
         '<span class="ai-share-legend-item">'
         f'<span class="ai-share-swatch" style="background:{colors[group]}"></span>'
-        f'{escape(group)}</span>'
+        f'{escape(group)}{help_icon_html(group)}</span>'
         for group in ordered_groups
     )
     return (
@@ -447,7 +514,7 @@ def render_results_band(before: str, after: str) -> None:
     st.markdown(
         '<div class="ai-results-band"><div>'
         f'<div class="ai-results-big">{headline}</div>'
-        f'<div class="ai-results-sub">{"right address" if has_before else "Located automatically"}</div></div>'
+        f'<div class="ai-results-sub">{"right address" + help_icon_html("Right address") if has_before else "Located automatically"}</div></div>'
         '<div class="ai-results-progress">' + "".join(lines) + "</div></div>",
         unsafe_allow_html=True,
     )

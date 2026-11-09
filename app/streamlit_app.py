@@ -308,6 +308,22 @@ def _verification_text(row: dict[str, Any]) -> str:
     return friendly_label(str(row.get("verification_status", "not_started")))
 
 
+def _case_panels_html(panels: list[tuple[str, str, bool]], *, help_labels: bool = False) -> str:
+    panel_html = "".join(
+        '<div class="ai-case-panel" style="min-width:0;box-sizing:border-box;'
+        f'padding:14px;border:1px solid #E6E3F0;border-radius:8px;background:{"#F5EFFC" if tinted else "#FFFFFF"}">'
+        f'<div style="font-size:12px;color:#5F5A73;margin-bottom:6px">{escape(label)}'
+        f'{app_ui.help_icon_html(label) if help_labels else ""}</div>'
+        f'<div style="color:#1B1433;overflow-wrap:anywhere;white-space:pre-wrap">{escape(value)}</div></div>'
+        for label, value, tinted in panels
+    )
+    return (
+        '<style>@media(max-width:600px){.ai-case-panels{grid-template-columns:1fr !important}}</style>'
+        f'<div class="ai-case-panels" style="display:grid;'
+        f'grid-template-columns:repeat({len(panels)},minmax(0,1fr));gap:12px">{panel_html}</div>'
+    )
+
+
 def _render_exception_detail(detail: dict[str, Any]) -> None:
     values = format_exception_table_rows([detail])[0]
     address = _format_address(detail.get("suggestion"))
@@ -353,19 +369,7 @@ def _render_exception_detail(detail: dict[str, Any]) -> None:
             if value and str(value).strip()
         ]
         if panels:
-            panel_html = "".join(
-                '<div class="ai-case-panel" style="min-width:0;box-sizing:border-box;'
-                f'padding:14px;border:1px solid #E6E3F0;border-radius:8px;background:{"#F5EFFC" if tinted else "#FFFFFF"}">'
-                f'<div style="font-size:12px;color:#5F5A73;margin-bottom:6px">{escape(label)}</div>'
-                f'<div style="color:#1B1433;overflow-wrap:anywhere;white-space:pre-wrap">{escape(value)}</div></div>'
-                for label, value, tinted in panels
-            )
-            st.markdown(
-                '<style>@media(max-width:600px){.ai-case-panels{grid-template-columns:1fr !important}}</style>'
-                f'<div class="ai-case-panels" style="display:grid;'
-                f'grid-template-columns:repeat({len(panels)},minmax(0,1fr));gap:12px">{panel_html}</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(_case_panels_html(panels), unsafe_allow_html=True)
 
         stages = []
         if address != "No suggested address.":
@@ -400,9 +404,10 @@ def _render_exception_detail(detail: dict[str, Any]) -> None:
         ]
         if technical:
             with st.expander("Technical detail", expanded=False):
-                for label, value in technical:
-                    st.markdown(f"**{label}**")
-                    st.write(value)
+                st.markdown(
+                    _case_panels_html([(label, value, False) for label, value in technical], help_labels=True),
+                    unsafe_allow_html=True,
+                )
 
 
 def _stage_commands(
@@ -1057,8 +1062,9 @@ with results_tab:
         )
     _display_kpis(summary_path)
 
-    work_heading, work_mode = st.columns([1, 1])
+    work_heading, work_label, work_mode = st.columns([1, 0.13, 1], vertical_alignment="center")
     work_heading.subheader("Work list for your analysts", anchor=False)
+    work_label.markdown("Show:")
     st.write(
         "Work list for whoever maintains the client's address data: what to fix, who does it (customer outreach or analyst review), and whether Precisely confirmed an AI fix."
     )
@@ -1067,6 +1073,7 @@ with results_tab:
         ["Made-up examples (safe to share)", "Real results on this computer"],
         horizontal=True,
         key="results_mode",
+        label_visibility="collapsed",
     )
     demo_mode = display_mode == "Made-up examples (safe to share)"
     if demo_mode:
