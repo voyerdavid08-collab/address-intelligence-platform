@@ -167,32 +167,48 @@ def summarize_address_result(payload: Any) -> dict[str, Any]:
     }
     if len(coordinates) == 2:
         summary["longitude"], summary["latitude"] = coordinates
+    if not summary.get("precisely_id"):
+        summary["precisely_id"] = find_precisely_id(payload)
     return {key: value for key, value in summary.items() if value not in (None, "", [])}
+
+
+def _flatten(value: Any, prefix: str = "", out: dict[str, Any] | None = None) -> dict[str, Any]:
+    out = {} if out is None else out
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _flatten(item, f"{prefix}{key}.", out)
+    elif isinstance(value, list):
+        if value:
+            _flatten(value[0], prefix, out)
+    elif value not in (None, ""):
+        out[prefix.rstrip(".")] = value
+    return out
 
 
 def summarize_flood_result(payload: Any) -> dict[str, Any]:
     """Keep the flood fields a business reader understands; drop everything else."""
     result = payload.get("result", payload) if isinstance(payload, dict) else {}
-    flat: dict[str, Any] = {}
-
-    def walk(value: Any, prefix: str = "") -> None:
-        if isinstance(value, dict):
-            for key, item in value.items():
-                walk(item, f"{prefix}{key}.")
-        elif isinstance(value, list):
-            if value:
-                walk(value[0], prefix)
-        elif value not in (None, ""):
-            flat[prefix.rstrip(".")] = value
-
-    walk(result)
+    flat = {
+        key: value
+        for key, value in _flatten(result).items()
+        if not re.search(r"(geometry|coordinates|credits|query|id$|^action)", key, re.IGNORECASE)
+    }
     wanted = re.compile(
-        r"(floodZone|zone$|zoneDesc|riskLevel|description|baseFloodElevation|"
-        r"distanceToNearestWaterbody|100|500|communityStatus|sfha)",
+        r"(zone|risk|sfha|baseFlood|waterbody|100|500|communityStatus|elevation)",
         re.IGNORECASE,
     )
     kept = {key: value for key, value in flat.items() if wanted.search(key)}
-    return dict(list(kept.items())[:12]) or {"found": False}
+    if not kept:
+        kept = flat
+    return dict(list(kept.items())[:10]) or {"found": False}
+
+
+def find_precisely_id(payload: Any) -> str:
+    """Find the PreciselyID (PB_KEY) anywhere in a Precisely answer."""
+    for key, value in _flatten(payload).items():
+        if re.search(r"(PB_KEY|preciselyId|pbKey)$", key, re.IGNORECASE) and isinstance(value, str):
+            return value
+    return ""
 
 
 def summarize(tool: str, payload: Any) -> dict[str, Any]:
@@ -366,6 +382,7 @@ class Investigation:
     fix_check: dict[str, Any] | None = None
     fix_confirmed: bool | None = None
     guardrail_note: str = ""
+    precisely_data: dict[str, Any] = field(default_factory=dict)
     tool_calls: int = 0
     seconds: float = 0.0
 
@@ -384,6 +401,7 @@ class Investigation:
             "fix_check": self.fix_check,
             "fix_confirmed": self.fix_confirmed,
             "guardrail_note": self.guardrail_note,
+            "precisely_data": self.precisely_data,
             "tool_calls": self.tool_calls,
             "seconds": round(self.seconds, 1),
         }
@@ -462,6 +480,20 @@ def check_fix_guardrails(fix: dict[str, str] | None, original: str) -> tuple[dic
             + ", so the guardrail treated it as a different place, not a fix. This goes to analyst research."
         )
     return fix, ""
+
+
+def describe_precision(code: str) -> str:
+    """Turn a Precisely precision code into plain words."""
+    code = (code or "").upper()
+    if code.startswith("S8"):
+        return "Exact address point"
+    if code.startswith(("S5", "S6", "S7")):
+        return "On the street, not the exact building"
+    if code.startswith(("S1", "S2", "S3", "S4")):
+        return "Approximate street location"
+    if code.startswith(("Z", "G")):
+        return "ZIP or city level only"
+    return ""
 
 
 def format_fix(fix: dict[str, str]) -> str:
@@ -725,13 +757,26 @@ class Investigator:
                      "state": as_given.get("state", ""), "zip5": as_given.get("zip5", "")},
                     address,
                 )
-                investigation.guardrail_note = place_note
+                if place_note:
+                    where = ", ".join(x for x in (as_given.get("street_line", ""), as_given.get("city", ""), as_given.get("state", "")) if x)
+                    investigation.guardrail_note = (
+                        f"Precisely's first match for the address as written was a different place ({where.title()}), "
+                        "so the guardrail set it aside"
+                        + (" and the AI tried the likely spelling." if investigation.fix_confirmed else ". This goes to analyst research.")
+                    )
 
         if best:
             located = self._run_tool("geocode_address", best, start, investigation)
             evidence["precisely_location"] = located
+            investigation.precisely_data = {
+                "located": describe_precision(located.get("precision_code", "")),
+                "precision_code": located.get("precision_code", ""),
+                "precisely_id": located.get("precisely_id", ""),
+            }
             if located.get("found"):
-                evidence["precisely_flood"] = self._run_tool("get_flood_risk", best, start, investigation)
+                flood = self._run_tool("get_flood_risk", best, start, investigation)
+                evidence["precisely_flood"] = flood
+                investigation.precisely_data["flood"] = {k: v for k, v in flood.items() if k != "found"}
 
         self._check_time(start)
         began = self.clock()
@@ -801,6 +846,7 @@ def made_up_investigation(address: str) -> dict[str, Any]:
         "fix_check": {"found": True, "score": 100},
         "fix_confirmed": True,
         "guardrail_note": "",
+        "precisely_data": {"located": "Exact address point", "flood": {"Flood zone": "X (made-up)"}, "precisely_id": "P0000EXAMPLE"},
         "tool_calls": 4,
         "seconds": 0.0,
         "made_up": True,

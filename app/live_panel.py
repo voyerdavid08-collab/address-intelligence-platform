@@ -5,6 +5,7 @@ from __future__ import annotations
 from html import escape
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -123,8 +124,21 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
         ))
     else:
         panels.append(_panel("Proposed fix", escape("No safe fix from the data. This goes to " + NEXT_STEP_LABELS.get(result.get("next_step", ""), "an analyst").lower() + ".")))
+    data = result.get("precisely_data") or {}
+    lines = []
+    if data.get("located"):
+        lines.append(f"<b>Located:</b> {escape(data['located'])}")
+    for key, value in list((data.get("flood") or {}).items())[:3]:
+        label = re.sub(r"([a-z])([A-Z])", r"\1 \2", key.split(".")[-1]).replace("_", " ").capitalize()
+        lines.append(f"<b>{escape(label)}:</b> {escape(str(value))}")
+    if data.get("precisely_id"):
+        lines.append(f"<b>PreciselyID:</b> {escape(data['precisely_id'])}")
+    if lines:
+        panels.append(_panel("Precisely's data", "<br>".join(lines)))
+    if result.get("seconds") and not result.get("made_up"):
+        st.caption(f"Investigation complete in {result['seconds']} s.")
     st.markdown(
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'
         + "".join(panels)
         + "</div>",
         unsafe_allow_html=True,
@@ -288,6 +302,7 @@ def render_investigate(
                         status.update(label=f"Investigation complete in {live_result['seconds']} s", state="complete")
                         st.session_state[result_key] = live_result
                         _save_result(run_dir, case_key, live_result)
+                        st.rerun()
 
     result = st.session_state.get(result_key)
     if not result:

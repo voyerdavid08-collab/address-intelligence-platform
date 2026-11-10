@@ -284,3 +284,24 @@ def test_live_settings_and_readiness(tmp_path, monkeypatch):
     assert live_panel._ready(settings)
     assert not live_panel._ready({**settings, "groq_key": ""})
     assert not live_panel._ready({**settings, "route": "direct", "has_direct_keys": False})
+
+
+def test_result_shows_precisely_data_and_a_clear_first_match_note():
+    post = ScriptedPost([corrections(NAPOLEON), explanation()])
+    result = make(FakeRoute(), post).investigate(TYPO)
+    assert result.precisely_data["flood"] == {"floodZone": "X"}
+    assert "set it aside and the AI tried the likely spelling" in result.guardrail_note
+    assert "Harvey" in result.guardrail_note
+    assert "analyst research" not in result.guardrail_note
+
+
+def test_precision_codes_in_plain_words():
+    assert live_ai.describe_precision("S8HPNTSCZA") == "Exact address point"
+    assert live_ai.describe_precision("S5HPNTSCZA").startswith("On the street")
+    assert live_ai.describe_precision("Z1") == "ZIP or city level only"
+
+
+def test_flood_summary_falls_back_and_finds_precisely_id():
+    summary = summarize_flood_result({"result": {"data": [{"fieldA": 1, "fieldB": "two"}]}})
+    assert summary == {"data.fieldA": 1, "data.fieldB": "two"}
+    assert live_ai.find_precisely_id({"a": {"customFields": {"PB_KEY": "P1"}}}) == "P1"
