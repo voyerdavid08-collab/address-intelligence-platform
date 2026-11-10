@@ -96,6 +96,7 @@ Errors were injected by design, so rules look better here than they would on rea
 | R12 | Follow-up cases for analysts | 16 of 30 | 30 − 14 | same | Measured |
 | R13 | Analyst cases with a confirmed fix to approve | 6 of 16 | Confirmed by Precisely | same | Measured |
 | R14 | Cases left for research | 10 of 200 | 16 − 6 | same | Measured |
+| R15 | Live investigation of one flagged address, to a Precisely-checked suggestion | About 5 seconds (4.4–5.2 s over 5 runs; backup route 6.6 s) | Timed live runs, Precisely HQ keyed with three errors, Nov 10, 2026 | `data/output/run/live_ai/usage.jsonl` | Measured |
 | R8 | Calibration | Pending client data | Only 6 ambiguous exceptions in the calibration split | same | Measured |
 
 Precisely confirms that a suggested address exists, not that it is the policyholder's. Every suggestion goes to an analyst for review.
