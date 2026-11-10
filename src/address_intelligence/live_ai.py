@@ -50,6 +50,9 @@ SYSTEM_PROMPT = (
     "You help an insurance operations analyst investigate one problem address. "
     "You may only use the tools provided, which return Precisely's data about the address. "
     "Check the address first, then locate it, then check its flood risk if it can be located. "
+    "If the address looks misspelled, you may verify your own corrected spelling with the same house number and state. "
+    "If Precisely matches a different street name in a different city, treat it as a different place, not a correction: "
+    "propose no fix and send it to analyst research. "
     "Never invent data. Do not add or change a house number, and do not change the state. "
     "Precisely confirming an address means it exists; it does not prove it belongs to the "
     "policyholder. Keep explanations short and plain, for a business reader."
@@ -202,7 +205,11 @@ def summarize(tool: str, payload: Any) -> dict[str, Any]:
 
 
 class McpRoute:
-    """Calls Precisely's AI Studio MCP connector with fixed, read-only actions."""
+    """Calls Precisely's AI Studio MCP connector with fixed, read-only actions.
+
+    Use it as a context manager to keep one MCP session open for a whole
+    investigation (faster). Without it, each call opens its own session.
+    """
 
     name = "Precisely AI Studio MCP connector"
 
@@ -212,20 +219,25 @@ class McpRoute:
         self._token = token
         self.url = url
         self.timeout_seconds = timeout_seconds
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: Any = None
+        self._stack: Any = None
+        self._session: Any = None
 
-    async def _execute(self, action_id: str, arguments: dict[str, Any]) -> Any:
+    async def _open_session(self, stack: Any) -> Any:
         from mcp import ClientSession
         from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-        client = create_mcp_http_client(headers={"Authorization": f"Apikey {self._token}"})
-        async with client:
-            async with streamable_http_client(self.url, http_client=client) as streams:
-                async with ClientSession(streams[0], streams[1]) as session:
-                    await session.initialize()
-                    result = await session.call_tool(
-                        "precisely_actions_execute",
-                        {"action_id": action_id, "arguments": arguments},
-                    )
+        client = await stack.enter_async_context(
+            create_mcp_http_client(headers={"Authorization": f"Apikey {self._token}"})
+        )
+        streams = await stack.enter_async_context(streamable_http_client(self.url, http_client=client))
+        session = await stack.enter_async_context(ClientSession(streams[0], streams[1]))
+        await session.initialize()
+        return session
+
+    @staticmethod
+    def _parse(action_id: str, result: Any) -> Any:
         if getattr(result, "is_error", False) or getattr(result, "isError", False):
             raise LiveAIError(f"Precisely returned an error for {action_id}.")
         text = "\n".join(getattr(block, "text", "") or "" for block in (result.content or []))
@@ -234,12 +246,66 @@ class McpRoute:
         except ValueError as error:
             raise LiveAIError(f"Precisely returned an unreadable answer for {action_id}.") from error
 
+    async def _execute_once(self, action_id: str, arguments: dict[str, Any]) -> Any:
+        from contextlib import AsyncExitStack
+
+        async with AsyncExitStack() as stack:
+            session = await self._open_session(stack)
+            result = await session.call_tool(
+                "precisely_actions_execute", {"action_id": action_id, "arguments": arguments}
+            )
+        return self._parse(action_id, result)
+
+    async def _execute_open(self, action_id: str, arguments: dict[str, Any]) -> Any:
+        result = await self._session.call_tool(
+            "precisely_actions_execute", {"action_id": action_id, "arguments": arguments}
+        )
+        return self._parse(action_id, result)
+
+    def __enter__(self) -> "McpRoute":
+        import threading
+        from contextlib import AsyncExitStack
+
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._thread.start()
+
+        async def opener() -> Any:
+            self._stack = AsyncExitStack()
+            return await self._open_session(self._stack)
+
+        try:
+            self._session = asyncio.run_coroutine_threadsafe(opener(), self._loop).result(self.timeout_seconds)
+        except Exception as error:
+            self.__exit__(None, None, None)
+            raise LiveAIError("The MCP connector did not answer.") from error
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        if self._loop is None:
+            return
+        if self._stack is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(self._stack.aclose(), self._loop).result(5)
+            except Exception:
+                pass
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        self._loop = self._thread = self._stack = self._session = None
+
     def call(self, tool: str, address: str) -> dict[str, Any]:
         action = TOOL_ACTIONS[tool]
+        arguments = {"address": address}
         try:
-            payload = asyncio.run(
-                asyncio.wait_for(self._execute(action, {"address": address}), self.timeout_seconds)
-            )
+            if self._session is not None and self._loop is not None:
+                payload = asyncio.run_coroutine_threadsafe(
+                    self._execute_open(action, arguments), self._loop
+                ).result(self.timeout_seconds)
+            else:
+                payload = asyncio.run(
+                    asyncio.wait_for(self._execute_once(action, arguments), self.timeout_seconds)
+                )
         except LiveAIError:
             raise
         except Exception as error:  # network, timeout, protocol
@@ -328,17 +394,62 @@ def _house_number(line: str) -> str:
     return match.group(1) if match else ""
 
 
+def _split_address(text: str) -> dict[str, str]:
+    """Best-effort split of 'line1, city, ST zip' into its parts."""
+    parts = [part.strip() for part in (text or "").split(",") if part.strip()]
+    state_zip = re.search(r"\b([A-Za-z]{2})\b[\s,]*(\d{5})?(?:-\d{4})?\s*$", text or "")
+    city = ""
+    if len(parts) >= 3:
+        city = parts[1]
+    elif len(parts) == 2:
+        city = re.sub(r"\b[A-Za-z]{2}\b[\s,]*\d{5}(?:-\d{4})?\s*$", "", parts[1]).strip()
+    return {
+        "line1": parts[0] if parts else "",
+        "city": city,
+        "state": state_zip.group(1).upper() if state_zip else "",
+    }
+
+
+def _street_name(line1: str) -> str:
+    return re.sub(r"^\s*\d+[A-Za-z]?\s+", "", (line1 or "")).upper().strip()
+
+
+def street_similarity(a: str, b: str) -> float:
+    from difflib import SequenceMatcher
+
+    return SequenceMatcher(None, _street_name(a), _street_name(b)).ratio()
+
+
+def address_change_allowed(candidate: str, original: str) -> bool:
+    """A tool may run on a corrected spelling only if house number and state stay the same."""
+    if _normalize(candidate) == _normalize(original):
+        return True
+    cand, orig = _split_address(candidate), _split_address(original)
+    if _house_number(cand["line1"]) != _house_number(orig["line1"]):
+        return False
+    if orig["state"] and cand["state"] and cand["state"] != orig["state"]:
+        return False
+    return street_similarity(cand["line1"], orig["line1"]) >= 0.5
+
+
 def check_fix_guardrails(fix: dict[str, str] | None, original: str) -> tuple[dict[str, str] | None, str]:
-    """Drop a fix that adds or changes a house number or changes the state."""
+    """Drop a fix that changes the house number or state, or points at a different place."""
     if not fix:
         return None, ""
-    original_number = _house_number(original)
+    orig = _split_address(original)
     fix_number = _house_number(fix.get("line1", ""))
-    if fix_number and fix_number != original_number:
+    if fix_number and fix_number != _house_number(orig["line1"]):
         return None, "The AI's fix changed the house number, so the guardrail removed it."
-    states = re.findall(r"\b([A-Z]{2})\b(?=\s*\d{5}|\s*$)", original.upper())
-    if states and fix.get("state") and fix["state"].upper() != states[-1]:
+    if orig["state"] and fix.get("state") and fix["state"].upper() != orig["state"]:
         return None, "The AI's fix changed the state, so the guardrail removed it."
+    similarity = street_similarity(fix.get("line1", ""), orig["line1"])
+    city_changed = bool(orig["city"]) and _normalize(fix.get("city", "")) != _normalize(orig["city"])
+    if similarity < 0.5 or (city_changed and similarity < 0.75):
+        return None, (
+            "Precisely's closest match is a different street"
+            + (" in another city" if city_changed else "")
+            + ", so the guardrail treated it as a different place, not a fix. This goes to analyst research."
+        )
     return fix, ""
 
 
@@ -390,6 +501,7 @@ class Investigator:
             "messages": messages,
             "temperature": 0.2,
             "max_completion_tokens": 900,
+            "reasoning_effort": "low",
         }
         if tools:
             payload["tools"] = TOOL_SCHEMAS
@@ -477,10 +589,14 @@ class Investigator:
                         arguments = json.loads((call.get("function") or {}).get("arguments") or "{}")
                     except ValueError:
                         arguments = {}
-                    # The AI may only investigate the address it was given.
-                    output = self._run_tool(name, address, start, investigation)
-                    if arguments.get("address") and _normalize(arguments["address"]) != _normalize(address):
-                        output = {**output, "note": "Tool run on the original address only."}
+                    # The AI may test its own corrected spelling, but never another house or state.
+                    requested = " ".join(str(arguments.get("address") or address).split())
+                    target = requested if address_change_allowed(requested, address) else address
+                    output = self._run_tool(name, target, start, investigation)
+                    if target != requested:
+                        output = {**output, "note": "Guardrail: the tool ran on the original address."}
+                    elif target != address:
+                        output = {**output, "note": f"Checked the corrected spelling: {target}"}
                     messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": json.dumps(output)})
 
         self._check_time(start)
@@ -504,6 +620,8 @@ class Investigator:
             raw_fix = None
         fix, note = check_fix_guardrails(raw_fix, address)
         investigation.proposed_fix, investigation.guardrail_note = fix, note
+        if note:
+            investigation.next_step = "analyst_research"
 
         if fix:
             check = self._run_tool("verify_address", format_fix(fix), start, investigation)
@@ -520,8 +638,8 @@ class Investigator:
 
 def record_decision(log_path: Path, *, case_id: str, decision: str, investigation: dict[str, Any]) -> dict[str, Any]:
     """Write an analyst's Approve or Reject to the local decision log. Nothing touches a policy record."""
-    if decision not in ("approved", "rejected"):
-        raise ValueError("decision must be approved or rejected")
+    if decision not in ("approved", "rejected", "sent_to_research"):
+        raise ValueError("decision must be approved, rejected or sent_to_research")
     entry = {
         "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "case": case_id,

@@ -151,18 +151,24 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
     st.info(LIMITS_NOTE)
 
     if fix and decision_log is not None and not result.get("made_up"):
-        approve, reject = st.columns(2)
+        first, second = st.columns(2)
         decision = None
-        if approve.button("Approve the fix", key=f"approve_{case_key}", type="primary", icon=":material/check:"):
-            decision = "approved"
-        if reject.button("Reject the fix", key=f"reject_{case_key}", icon=":material/close:"):
+        if confirmed:
+            if first.button("Approve the fix", key=f"approve_{case_key}", type="primary", icon=":material/check:"):
+                decision = "approved"
+        else:
+            st.caption("Precisely did not confirm this fix, so it cannot be approved.")
+            if first.button("Send to research", key=f"research_{case_key}", type="primary", icon=":material/manage_search:"):
+                decision = "sent_to_research"
+        if second.button("Reject the fix", key=f"reject_{case_key}", icon=":material/close:"):
             decision = "rejected"
         if decision:
             record_decision(decision_log, case_id=case_key, decision=decision, investigation=result)
             st.session_state[f"live_decision_{case_key}"] = decision
         recorded = st.session_state.get(f"live_decision_{case_key}")
         if recorded:
-            st.success(f"Decision recorded ({recorded}) for the pilot audit trail. No policy record was changed.")
+            label = {"approved": "approved", "rejected": "rejected", "sent_to_research": "sent to research"}.get(recorded, recorded)
+            st.success(f"Decision recorded ({label}) for the pilot audit trail. No policy record was changed.")
 
 
 def render_investigate(
@@ -179,8 +185,9 @@ def render_investigate(
     settings = live_settings(root)
     if not settings["enabled"]:
         return
-    result_key = f"live_result_{case_key}"
-    pending_key = f"live_pending_{case_key}"
+    mode = "real" if real_mode else "made_up"
+    result_key = f"live_result_{mode}_{case_key}"
+    pending_key = f"live_pending_{mode}_{case_key}"
 
     if allow_typed:
         address = st.text_input(
@@ -190,9 +197,19 @@ def render_investigate(
             placeholder="For example: 1700 District Ave, Burlington, MA 01803",
         )
 
+    if allow_typed and not real_mode:
+        st.caption("Switch Show to Real results on this computer to investigate a typed address. Made-up mode never invents a result for a real address.")
+        return
+
     if real_mode and not _ready(settings):
         st.caption("Live AI is not set up on this computer.")
         return
+    if real_mode and settings["route"] != "direct":
+        try:  # load the MCP package before the click, so the first run is not slower
+            import mcp.client.streamable_http  # noqa: F401
+        except ImportError:
+            st.caption("Live AI needs the MCP package on this computer.")
+            return
 
     if st.button(
         "Ask AI to investigate",
@@ -227,9 +244,14 @@ def render_investigate(
                     def on_step(step: Step) -> None:
                         st.write(f"{step.label}: done in {step.seconds:.1f} s")
 
+                    route = None
+                    live_result = None
                     try:
+                        route = _build_route(settings)
+                        if hasattr(route, "__enter__"):
+                            route.__enter__()
                         investigator = Investigator(
-                            _build_route(settings),
+                            route,
                             groq_api_key=settings["groq_key"],
                             model=settings["model"],
                             fixed_order=settings["fixed_order"],
@@ -237,17 +259,20 @@ def render_investigate(
                             usage_log=run_dir / "live_ai" / "usage.jsonl",
                         )
                         st.write("The AI is reading the address…")
-                        result = investigator.investigate(address).as_dict()
+                        live_result = investigator.investigate(address).as_dict()
                     except LiveAIError as error:
                         status.update(label="Live service unavailable", state="error")
                         st.session_state[result_key] = {"fallback": True, "reason": str(error)}
                     except Exception:
                         status.update(label="Live service unavailable", state="error")
                         st.session_state[result_key] = {"fallback": True, "reason": "unexpected error"}
-                    else:
-                        status.update(label=f"Investigation complete in {result['seconds']} s", state="complete")
-                        st.session_state[result_key] = result
-                        _save_result(run_dir, case_key, result)
+                    finally:
+                        if route is not None and hasattr(route, "__exit__"):
+                            route.__exit__(None, None, None)
+                    if live_result is not None:
+                        status.update(label=f"Investigation complete in {live_result['seconds']} s", state="complete")
+                        st.session_state[result_key] = live_result
+                        _save_result(run_dir, case_key, live_result)
 
     result = st.session_state.get(result_key)
     if not result:

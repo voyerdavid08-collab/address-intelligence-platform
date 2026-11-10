@@ -164,15 +164,28 @@ def test_tool_call_cap_is_enforced():
         make(FakeRoute(), ScriptedPost(loop)).investigate(ADDRESS)
 
 
-def test_ai_cannot_point_tools_at_another_address():
+def test_ai_cannot_point_tools_at_another_house_or_state():
     route = FakeRoute()
     post = ScriptedPost([
-        {"content": "", "tool_calls": [tool_call("verify_address", address="10 Other St, Boston, MA")]},
+        {"content": "", "tool_calls": [tool_call("verify_address", address="10 Other St, Boston, MA 02110")]},
         {"content": ""},
         final_answer(),
     ])
     make(route, post).investigate(ADDRESS)
     assert route.calls == [("verify_address", ADDRESS)]
+
+
+def test_ai_may_test_its_own_corrected_spelling():
+    original = "1141 Napoheon Ave, New Orleans, LA, 70115"
+    corrected = "1141 Napoleon Ave, New Orleans, LA 70115"
+    route = FakeRoute()
+    post = ScriptedPost([
+        {"content": "", "tool_calls": [tool_call("verify_address", address=corrected)]},
+        {"content": ""},
+        final_answer(),
+    ])
+    make(route, post).investigate(original)
+    assert route.calls == [("verify_address", corrected)]
 
 
 def test_timeout_raises_for_fallback():
@@ -197,6 +210,7 @@ def test_ai_error_status_raises_for_fallback():
         ({"line1": "1700 District Ave", "city": "Burlington", "state": "MA", "zip5": "01803"}, True),
         ({"line1": "1800 District Ave", "city": "Burlington", "state": "MA", "zip5": "01803"}, False),
         ({"line1": "1700 District Ave", "city": "Burlington", "state": "NH", "zip5": "01803"}, False),
+        ({"line1": "1700 New Orleans Ave", "city": "Harvey", "state": "MA", "zip5": "01803"}, False),
     ],
 )
 def test_guardrails_on_house_number_and_state(fix, kept):
@@ -259,3 +273,33 @@ def test_live_settings_and_readiness(tmp_path, monkeypatch):
     assert live_panel._ready(settings)
     assert not live_panel._ready({**settings, "groq_key": ""})
     assert not live_panel._ready({**settings, "route": "direct", "has_direct_keys": False})
+
+
+def test_different_place_guardrail_on_the_gate_1_case():
+    original = "1141 Napoheon Ave, New Orleans, LA, 70115"
+    harvey = {"line1": "1141 New Orleans Ave", "city": "Harvey", "state": "LA", "zip5": "70058"}
+    napoleon = {"line1": "1141 Napoleon Ave", "city": "New Orleans", "state": "LA", "zip5": "70115"}
+    fix, note = check_fix_guardrails(harvey, original)
+    assert fix is None and "different place" in note
+    fix, note = check_fix_guardrails(napoleon, original)
+    assert fix == napoleon and note == ""
+
+
+def test_guardrail_sends_a_dropped_fix_to_research():
+    harvey = {"line1": "1141 New Orleans Ave", "city": "Harvey", "state": "LA", "zip5": "70058"}
+    post = ScriptedPost([final_answer(harvey, next_step="approve_fix")])
+    result = make(FakeRoute(), post, fixed_order=True).investigate("1141 Napoheon Ave, New Orleans, LA, 70115")
+    assert result.proposed_fix is None
+    assert result.next_step == "analyst_research"
+
+
+def test_ai_requests_use_low_reasoning_effort():
+    post = ScriptedPost([final_answer()])
+    make(FakeRoute(), post, fixed_order=True).investigate(ADDRESS)
+    assert post.payloads[0]["reasoning_effort"] == "low"
+
+
+def test_send_to_research_decision_is_recorded(tmp_path):
+    log = tmp_path / "decisions.jsonl"
+    entry = record_decision(log, case_id="POL-2", decision="sent_to_research", investigation={})
+    assert entry["decision"] == "sent_to_research"
