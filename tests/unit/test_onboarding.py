@@ -788,7 +788,7 @@ def test_start_here_and_no_inner_steppers():
     assert len(re.findall(r'"title": "[1-4] ', start_tab)) == 4
     for safety_line in (
         "Only address columns are used; every other column stays on this computer.",
-        "This app never contacts Precisely or the AI. Paid runs start only from the command line, after approval.",
+        "The app contacts the AI and Precisely only when someone clicks Ask AI to investigate and confirms. Paid pipeline runs start only from the command line, after approval.",
         "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy, sections 4.1–4.2).",
         "Client files and settings are saved in a private project folder that is never uploaded to GitHub.",
     ):

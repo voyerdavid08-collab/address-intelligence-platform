@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "app"))
 
 import ui as app_ui
+import live_panel
 
 from address_intelligence.app_data import (
     _fraction,
@@ -519,7 +520,7 @@ with start_tab:
         st.subheader("Data safety at a glance", anchor=False)
         for icon, text in (
             (":material/verified_user:", "Only address columns are used; every other column stays on this computer."),
-            (":material/phonelink_lock:", "This app never contacts Precisely or the AI. Paid runs start only from the command line, after approval."),
+            (":material/phonelink_lock:", "The app contacts the AI and Precisely only when someone clicks Ask AI to investigate and confirms. Paid pipeline runs start only from the command line, after approval."),
             (":material/share:", "Made-up examples are safe to share. Real results are for local review only (Precisely APIs Acceptable Use Policy, sections 4.1–4.2)."),
             (":material/lock:", "Client files and settings are saved in a private project folder that is never uploaded to GitHub."),
         ):
@@ -1227,6 +1228,28 @@ with results_tab:
                         st.info(f"Open this folder on your computer: {full_path.parent}")
 
         if filtered:
-            _render_exception_detail(filtered[index])
+            selected_case = filtered[index]
+            _render_exception_detail(selected_case)
+            if live_panel.live_settings(ROOT)["enabled"]:
+                if selected_case.get("next_action") == "analyst_review":
+                    with st.container(border=True):
+                        st.markdown("**Investigate this case live**")
+                        live_panel.render_investigate(
+                            case_key=str(selected_case.get("policy_id", "case")),
+                            address=format_sales_worklist_rows([selected_case])[0]["Address on file"],
+                            real_mode=not demo_mode,
+                            root=ROOT,
+                            run_dir=profile.run_dir,
+                            saved_fallback=lambda: st.caption("The saved result for this case is in the case card above."),
+                        )
+                with st.expander("Investigate another address"):
+                    live_panel.render_investigate(
+                        case_key="typed_address",
+                        address="",
+                        real_mode=not demo_mode,
+                        root=ROOT,
+                        run_dir=profile.run_dir,
+                        allow_typed=True,
+                    )
 
 app_ui.render_footer()
