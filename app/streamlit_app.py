@@ -1231,7 +1231,11 @@ with results_tab:
             selected_case = filtered[index]
             _render_exception_detail(selected_case)
             if live_panel.live_settings(ROOT)["enabled"]:
-                if selected_case.get("next_action") == "analyst_review":
+                already_confirmed = (
+                    str(selected_case.get("verification_status", "")).strip().casefold() == "verified by precisely"
+                )
+                # Offer a live investigation only where the overnight run left work to do.
+                if selected_case.get("next_action") == "analyst_review" and not already_confirmed:
                     with st.container(border=True):
                         st.markdown("**Investigate this case live**")
                         live_panel.render_investigate(

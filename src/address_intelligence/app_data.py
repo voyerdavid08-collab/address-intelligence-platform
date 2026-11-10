@@ -252,7 +252,23 @@ def clean_worklist_text(text: str, replacements: Mapping[str, str] | None = None
             raise ValueError("Replacement phrases must not be empty.")
         pattern = re.compile("|".join(re.escape(key) for key in sorted(replacements, key=len, reverse=True)))
         text = pattern.sub(lambda match: replacements[match.group()], text)
-    return _SNAKE_CASE_PATTERN.sub(lambda match: match.group().replace("_", " "), text)
+    text = _SNAKE_CASE_PATTERN.sub(lambda match: match.group().replace("_", " "), text)
+    return _trim_cut_off_text(text)
+
+
+def _trim_cut_off_text(text: str) -> str:
+    """Saved AI explanations are capped at 200 characters and may end mid-word.
+
+    When the text was cut off (it ends in an ellipsis or a stray character), keep
+    only its complete sentences, so the screen never shows a broken word.
+    """
+    stripped = text.rstrip()
+    if not stripped or stripped.endswith((".", "!", "?")):
+        return text
+    cut = max(stripped.rfind(". "), stripped.rfind('." '), stripped.rfind("! "), stripped.rfind("? "))
+    if cut == -1:
+        return stripped.rstrip("….� ")
+    return stripped[: cut + 1].rstrip() if stripped[cut] == "." else stripped[: cut + 2].rstrip()
 
 
 _DEFECT_LABELS = {
