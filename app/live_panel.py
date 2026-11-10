@@ -307,11 +307,11 @@ def render_investigate(
     if not result:
         return
     if result.get("fallback"):
-        st.warning("Live service unavailable. Showing the result from the last run.")
         if saved_fallback is not None:
+            st.warning("Live service unavailable. Showing the result from the last run.")
             saved_fallback()
         else:
-            st.caption("No saved result exists for a typed address. Try again in a moment.")
+            st.warning("Live service unavailable.")
         return
     render_result(
         result,

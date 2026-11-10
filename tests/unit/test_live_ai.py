@@ -139,7 +139,7 @@ def test_typo_case_ai_corrects_and_precisely_confirms(tmp_path):
     assert result.proposed_fix == NAPOLEON
     assert result.fix_confirmed is True
     assert result.next_step == "approve_fix"
-    assert "different place" in result.guardrail_note
+    assert "changed the street and town" in result.guardrail_note
     assert any("Precisely checks the AI's correction" in step.label for step in result.steps)
     assert len(usage.read_text().splitlines()) == 4
     assert all("test-key" not in json.dumps(payload) for payload in post.payloads)
@@ -295,7 +295,8 @@ def test_result_shows_precisely_data_and_a_clear_first_match_note():
     result = make(FakeRoute(), post).investigate(TYPO)
     assert result.precisely_data["flood"] == {"Flood data": "No flood record returned for this address"}
     assert result.proposed_fix["zip5"] == "70115"
-    assert "set it aside and the AI tried the likely spelling" in result.guardrail_note
+    assert "closest match it could find" in result.guardrail_note
+    assert "the AI tried the likely spelling" in result.guardrail_note
     assert "Harvey" in result.guardrail_note
     assert "analyst research" not in result.guardrail_note
 

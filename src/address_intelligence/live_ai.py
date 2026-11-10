@@ -792,9 +792,9 @@ class Investigator:
                         ) if x
                     )
                     investigation.guardrail_note = (
-                        f"Precisely's first match for the address as written was a different place ({where}), "
-                        "so the guardrail set it aside"
-                        + (" and the AI tried the likely spelling." if investigation.fix_confirmed else ". This goes to analyst research.")
+                        f"Precisely returned the closest match it could find for the address as written ({where}). "
+                        "The guardrail rejected it because it changed the street and town"
+                        + (", and the AI tried the likely spelling." if investigation.fix_confirmed else ". This goes to analyst research.")
                     )
 
         if best:
