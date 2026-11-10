@@ -11,7 +11,7 @@ dependencies = ["python-dotenv", "requests", "faker", "openpyxl", "pyyaml"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
-app = ["streamlit"]
+app = ["streamlit", "mcp>=2.3"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
