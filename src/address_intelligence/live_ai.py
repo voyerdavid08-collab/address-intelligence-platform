@@ -395,19 +395,30 @@ def _house_number(line: str) -> str:
 
 
 def _split_address(text: str) -> dict[str, str]:
-    """Best-effort split of 'line1, city, ST zip' into its parts."""
+    """Best-effort split of 'line1[, unit], city, ST[,] zip' into line1, city and state."""
     parts = [part.strip() for part in (text or "").split(",") if part.strip()]
-    state_zip = re.search(r"\b([A-Za-z]{2})\b[\s,]*(\d{5})?(?:-\d{4})?\s*$", text or "")
-    city = ""
-    if len(parts) >= 3:
-        city = parts[1]
-    elif len(parts) == 2:
-        city = re.sub(r"\b[A-Za-z]{2}\b[\s,]*\d{5}(?:-\d{4})?\s*$", "", parts[1]).strip()
-    return {
-        "line1": parts[0] if parts else "",
-        "city": city,
-        "state": state_zip.group(1).upper() if state_zip else "",
-    }
+    state = ""
+    state_index = None
+    for index in range(len(parts) - 1, -1, -1):
+        found = re.fullmatch(r"([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?", parts[index])
+        if found:
+            state, state_index = found.group(1).upper(), index
+            break
+    if state_index is None and parts:
+        tail = re.search(r"\b([A-Za-z]{2})\s+\d{5}(?:-\d{4})?\s*$", parts[-1])
+        if tail:
+            state = tail.group(1).upper()
+            parts[-1] = parts[-1][: tail.start()].strip()
+            state_index = len(parts)
+    head = parts[:state_index] if state_index is not None else parts
+    unit = re.compile(r"^(apt|apartment|unit|ste|suite|#|fl|floor|bldg|rm|room)\b", re.IGNORECASE)
+    line_parts, city = [], ""
+    for index, part in enumerate(head):
+        if index == 0 or unit.match(part):
+            line_parts.append(part)
+        else:
+            city = part
+    return {"line1": " ".join(line_parts), "city": city, "state": state}
 
 
 def _street_name(line1: str) -> str:
@@ -461,8 +472,58 @@ def _normalize(text: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", (text or "").upper())
 
 
+CORRECTIONS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "line1": {"type": "string"},
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "zip5": {"type": "string"},
+                },
+                "required": ["line1", "city", "state", "zip5"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["candidates"],
+    "additionalProperties": False,
+}
+
+EXPLANATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "finding": {"type": "string"},
+        "likely_cause": {"type": "string"},
+        "why_it_matters": {"type": "string"},
+        "next_step": {"type": "string", "enum": ["customer_outreach", "analyst_research", "approve_fix", "no_change_needed"]},
+    },
+    "required": ["finding", "likely_cause", "why_it_matters", "next_step"],
+    "additionalProperties": False,
+}
+
+
+def confirms_address(check: dict[str, Any], address: str) -> bool:
+    """Precisely confirms an address when it finds it with a high score, on the same house and street."""
+    if not check.get("found") or (check.get("score") or 0) < 80:
+        return False
+    given = _split_address(address)
+    street = check.get("street_line") or ""
+    if _house_number(street) and _house_number(street) != _house_number(given["line1"]):
+        return False
+    if street_similarity(street, given["line1"]) < 0.85:
+        return False
+    if given["city"] and check.get("city") and _normalize(check["city"]) != _normalize(given["city"]):
+        return bool(check.get("zip5")) and check.get("zip5") in address
+    return True
+
+
 class Investigator:
-    """Runs one investigation: AI-chosen or fixed-order tools, then a re-check of the fix."""
+    """Runs one guided investigation: the AI proposes and explains, Precisely checks every step."""
 
     def __init__(
         self,
@@ -556,90 +617,156 @@ class Investigator:
 
     # ------------------------------------------------------------ the run
 
+    def _ask_json(self, messages: list[dict[str, Any]], name: str, schema: dict[str, Any]) -> dict[str, Any]:
+        payload_messages = list(messages)
+        message = self._chat_schema(payload_messages, name, schema)
+        try:
+            return json.loads(message.get("content") or "{}")
+        except ValueError as error:
+            raise LiveAIError("The AI's answer was not valid.") from error
+
+    def _chat_schema(self, messages: list[dict[str, Any]], name: str, schema: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_completion_tokens": 900,
+            "reasoning_effort": "low",
+            "response_format": {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
+        }
+        return self._send(payload)
+
+    def _send(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            response = self.post(
+                GROQ_URL,
+                headers={"Authorization": f"Bearer {self._groq_api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=15,
+            )
+        except requests.RequestException as error:
+            raise LiveAIError("The AI service did not answer.") from error
+        if not 200 <= response.status_code < 300:
+            raise LiveAIError(f"The AI service returned status {response.status_code}.")
+        try:
+            return response.json()["choices"][0]["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as error:
+            raise LiveAIError("The AI service returned an unreadable answer.") from error
+
+    def _ai_step(self, label: str, investigation: Investigation, began: float) -> None:
+        step = Step(label, None, "done", self.clock() - began, {})
+        investigation.steps.append(step)
+        self.on_step(step)
+
+    # ------------------------------------------------------------ the run
+
     def investigate(self, address: str) -> Investigation:
+        """Guided investigation: the AI reasons and proposes, Precisely's tools check every step.
+
+        1. Precisely checks the address as given.
+        2. If it isn't a clean match, the AI proposes up to two corrected spellings.
+        3. Precisely checks each correction; the guardrails reject other houses, states or places.
+        4. Precisely locates the best address and checks its flood risk.
+        5. The AI explains the finding in plain words. Only a Precisely-confirmed fix can be approved.
+        """
         address = " ".join((address or "").split())
         if not address:
             raise LiveAIError("Enter an address to investigate.")
         start = self.clock()
         investigation = Investigation(address=address, route=self.route.name, model=self.model)
-        user = {"role": "user", "content": json.dumps({"address_to_investigate": address})}
         investigation.ai_input = {"address_to_investigate": address, "tools_allowed": list(TOOL_ACTIONS)}
-        messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}, user]
+        evidence: dict[str, Any] = {"address_on_file": address}
 
-        if self.fixed_order:
-            located = True
-            for tool in FIXED_ORDER:
-                if tool == "get_flood_risk" and not located:
+        as_given = self._run_tool("verify_address", address, start, investigation)
+        evidence["precisely_check_as_given"] = as_given
+        clean = confirms_address(as_given, address)
+
+        best: str | None = address if clean else None
+        if not clean:
+            began = self.clock()
+            proposal = self._ask_json(
+                [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": json.dumps({
+                        "task": "The address did not match cleanly. Propose up to two corrected spellings of this "
+                                "same address (same house number, same unit, same state). Fix typos only.",
+                        "address_on_file": address,
+                        "precisely_check_as_given": as_given,
+                    })},
+                ],
+                "corrections",
+                CORRECTIONS_SCHEMA,
+            )
+            self._ai_step("The AI proposes corrected spellings", investigation, began)
+            candidates = [c for c in proposal.get("candidates", [])[:2] if str(c.get("line1", "")).strip()]
+            tried = []
+            for candidate in candidates:
+                kept, note = check_fix_guardrails(candidate, address)
+                if not kept:
+                    tried.append({"candidate": format_fix(candidate), "guardrail": note})
+                    continue
+                text = format_fix(kept)
+                check = self._run_tool("verify_address", text, start, investigation)
+                investigation.steps[-1].label = f"Precisely checks the AI's correction: {text}"
+                ok = confirms_address(check, text)
+                tried.append({"candidate": text, "precisely_check": check, "confirmed": ok})
+                if ok:
+                    investigation.proposed_fix = kept
+                    investigation.fix_check = check
+                    investigation.fix_confirmed = True
+                    best = text
                     break
-                output = self._run_tool(tool, address, start, investigation)
-                if tool == "geocode_address":
-                    located = bool(output.get("found"))
-                messages.append({"role": "user", "content": json.dumps({f"precisely_{tool}": output})})
-        else:
-            for _ in range(MAX_TOOL_CALLS + 1):
-                self._check_time(start)
-                message = self._chat(messages, tools=True, final=False)
-                calls = message.get("tool_calls") or []
-                if not calls:
-                    break
-                messages.append({"role": "assistant", "content": message.get("content") or "", "tool_calls": calls})
-                for call in calls:
-                    name = (call.get("function") or {}).get("name", "")
-                    try:
-                        arguments = json.loads((call.get("function") or {}).get("arguments") or "{}")
-                    except ValueError:
-                        arguments = {}
-                    # The AI may test its own corrected spelling, but never another house or state.
-                    requested = " ".join(str(arguments.get("address") or address).split())
-                    target = requested if address_change_allowed(requested, address) else address
-                    output = self._run_tool(name, target, start, investigation)
-                    if target != requested:
-                        output = {**output, "note": "Guardrail: the tool ran on the original address."}
-                    elif target != address:
-                        output = {**output, "note": f"Checked the corrected spelling: {target}"}
-                    messages.append({"role": "tool", "tool_call_id": call.get("id", ""), "content": json.dumps(output)})
+            evidence["corrections_tried"] = tried
+            if investigation.proposed_fix is None and candidates:
+                investigation.fix_confirmed = False
+            if as_given.get("found") and not confirms_address(as_given, address):
+                _, place_note = check_fix_guardrails(
+                    {"line1": as_given.get("street_line", ""), "city": as_given.get("city", ""),
+                     "state": as_given.get("state", ""), "zip5": as_given.get("zip5", "")},
+                    address,
+                )
+                investigation.guardrail_note = place_note
+
+        if best:
+            located = self._run_tool("geocode_address", best, start, investigation)
+            evidence["precisely_location"] = located
+            if located.get("found"):
+                evidence["precisely_flood"] = self._run_tool("get_flood_risk", best, start, investigation)
 
         self._check_time(start)
-        messages.append({
-            "role": "user",
-            "content": "Now give your answer as the JSON object requested. Propose a fix only if Precisely's data supports it.",
-        })
-        final = self._chat(messages, tools=False, final=True)
-        try:
-            answer = json.loads(final.get("content") or "{}")
-        except ValueError as error:
-            raise LiveAIError("The AI's answer was not valid.") from error
-
+        began = self.clock()
+        answer = self._ask_json(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps({
+                    "task": "Explain this investigation for a business reader in short, plain sentences. "
+                            "Say what was wrong, the likely cause, why it matters for the insurer, and the next step.",
+                    "evidence": evidence,
+                    "confirmed_fix": format_fix(investigation.proposed_fix) if investigation.proposed_fix else None,
+                })},
+            ],
+            "explanation",
+            EXPLANATION_SCHEMA,
+        )
+        self._ai_step("The AI explains the finding", investigation, began)
         investigation.finding = str(answer.get("finding", "")).strip()
         investigation.likely_cause = str(answer.get("likely_cause", "")).strip()
         investigation.why_it_matters = str(answer.get("why_it_matters", "")).strip()
-        next_step = answer.get("next_step")
-        investigation.next_step = next_step if next_step in NEXT_STEPS else "analyst_research"
-        raw_fix = answer.get("proposed_fix") if answer.get("has_fix") else None
-        if raw_fix and not str(raw_fix.get("line1", "")).strip():
-            raw_fix = None
-        fix, note = check_fix_guardrails(raw_fix, address)
-        investigation.proposed_fix, investigation.guardrail_note = fix, note
-        if note:
-            investigation.next_step = "analyst_research"
-
-        if fix:
-            check = self._run_tool("verify_address", format_fix(fix), start, investigation)
-            investigation.steps[-1].label = "Precisely re-checks the AI's fix"
-            investigation.fix_check = check
-            investigation.fix_confirmed = bool(
-                check.get("found")
-                and (check.get("score") or 0) >= 90
-                and _normalize(check.get("street_line", "")) == _normalize(fix.get("line1", ""))
-            )
+        if investigation.proposed_fix:
+            investigation.next_step = "approve_fix"
+        elif clean:
+            investigation.next_step = "no_change_needed"
+        else:
+            suggested = answer.get("next_step")
+            investigation.next_step = suggested if suggested in ("customer_outreach", "analyst_research") else "analyst_research"
         investigation.seconds = self.clock() - start
         return investigation
 
 
 def record_decision(log_path: Path, *, case_id: str, decision: str, investigation: dict[str, Any]) -> dict[str, Any]:
     """Write an analyst's Approve or Reject to the local decision log. Nothing touches a policy record."""
-    if decision not in ("approved", "rejected", "sent_to_research"):
-        raise ValueError("decision must be approved, rejected or sent_to_research")
+    if decision not in ("approved", "rejected", "sent_to_research", "sent_to_customer", "reviewed"):
+        raise ValueError("unknown decision")
     entry = {
         "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "case": case_id,

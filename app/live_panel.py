@@ -132,9 +132,9 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
     if result.get("guardrail_note"):
         st.caption(result["guardrail_note"])
 
-    stages = [_chip("AI investigated")]
-    if fix:
-        stages.append(_chip("Precisely checked"))
+    stages = [_chip("Precisely checked the address"), _chip("AI investigated")]
+    if fix and confirmed:
+        stages.append(_chip("Precisely confirmed the fix"))
     stages.append(_chip("Analyst decides", done=False))
     st.markdown(
         '<div class="ai-case-flow" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0">'
@@ -150,25 +150,40 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
         st.code(json.dumps(result.get("ai_input", {}), indent=2), language="json")
     st.info(LIMITS_NOTE)
 
-    if fix and decision_log is not None and not result.get("made_up"):
-        first, second = st.columns(2)
-        decision = None
-        if confirmed:
-            if first.button("Approve the fix", key=f"approve_{case_key}", type="primary", icon=":material/check:"):
-                decision = "approved"
-        else:
-            st.caption("Precisely did not confirm this fix, so it cannot be approved.")
-            if first.button("Send to research", key=f"research_{case_key}", type="primary", icon=":material/manage_search:"):
-                decision = "sent_to_research"
+    if decision_log is None or result.get("made_up"):
+        return
+    first, second = st.columns(2)
+    decision = None
+    if fix and confirmed:
+        if first.button("Approve the fix", key=f"approve_{case_key}", type="primary", icon=":material/check:"):
+            decision = "approved"
         if second.button("Reject the fix", key=f"reject_{case_key}", icon=":material/close:"):
             decision = "rejected"
-        if decision:
-            record_decision(decision_log, case_id=case_key, decision=decision, investigation=result)
-            st.session_state[f"live_decision_{case_key}"] = decision
-        recorded = st.session_state.get(f"live_decision_{case_key}")
-        if recorded:
-            label = {"approved": "approved", "rejected": "rejected", "sent_to_research": "sent to research"}.get(recorded, recorded)
-            st.success(f"Decision recorded ({label}) for the pilot audit trail. No policy record was changed.")
+    else:
+        if fix:
+            st.caption("Precisely did not confirm this fix, so it cannot be approved.")
+        if result.get("next_step") == "customer_outreach":
+            if first.button("Send to customer outreach", key=f"outreach_{case_key}", type="primary", icon=":material/mail:"):
+                decision = "sent_to_customer"
+        elif result.get("next_step") == "no_change_needed":
+            if first.button("Mark as reviewed", key=f"reviewed_{case_key}", type="primary", icon=":material/check:"):
+                decision = "reviewed"
+        else:
+            if first.button("Send to research", key=f"research_{case_key}", type="primary", icon=":material/manage_search:"):
+                decision = "sent_to_research"
+    if decision:
+        record_decision(decision_log, case_id=case_key, decision=decision, investigation=result)
+        st.session_state[f"live_decision_{case_key}"] = decision
+    recorded = st.session_state.get(f"live_decision_{case_key}")
+    if recorded:
+        label = {
+            "approved": "approved",
+            "rejected": "rejected",
+            "sent_to_research": "sent to research",
+            "sent_to_customer": "sent to customer outreach",
+            "reviewed": "reviewed",
+        }.get(recorded, recorded)
+        st.success(f"Decision recorded ({label}) for the pilot audit trail. No policy record was changed.")
 
 
 def render_investigate(

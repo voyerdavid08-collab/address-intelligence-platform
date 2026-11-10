@@ -6,11 +6,11 @@ import pytest
 
 from address_intelligence import live_ai
 from address_intelligence.live_ai import (
-    FIXED_ORDER,
     MAX_TOOL_CALLS,
     Investigator,
     LiveAIError,
     check_fix_guardrails,
+    confirms_address,
     made_up_investigation,
     record_decision,
     summarize_address_result,
@@ -38,21 +38,39 @@ VERIFY_PAYLOAD = {
     }]}]},
 }
 
+TYPO = "1141 Napoheon Ave, Apt 3, New Orleans, LA, 70115"
+NAPOLEON = {"line1": "1141 Napoleon Ave Apt 3", "city": "New Orleans", "state": "LA", "zip5": "70115"}
+HARVEY_CHECK = {"found": True, "score": 90, "street_line": "1141 NEW ORLEANS AVE", "city": "HARVEY", "state": "LA", "zip5": "70058"}
+NAPOLEON_CHECK = {"found": True, "score": 98, "street_line": "1141 NAPOLEON AVE APT 3", "city": "NEW ORLEANS", "state": "LA", "zip5": "70115"}
+HQ = "1700 District Ave, Burlington, MA 01803"
+HQ_CHECK = {"found": True, "score": 100, "street_line": "1700 DISTRICT AVE", "city": "BURLINGTON", "state": "MA", "zip5": "01803"}
+
 
 class FakeRoute:
+    """Answers like Precisely: the typo matches Harvey, the corrected spelling matches Napoleon Ave."""
+
     name = "fake route"
 
-    def __init__(self, fail_on=None):
+    def __init__(self, fail_on=None, answers=None):
         self.calls = []
         self.fail_on = fail_on
+        self.answers = answers or {}
 
     def call(self, tool, address):
         self.calls.append((tool, address))
         if tool == self.fail_on:
             raise LiveAIError("down")
         if tool == "get_flood_risk":
-            return {"floodZone": "X", "riskLevel": "Low"}
-        return {"found": True, "score": 100, "street_line": "1700 DISTRICT AVE", "latitude": 42.5, "longitude": -71.2}
+            return {"floodZone": "X"}
+        if tool == "geocode_address":
+            return {"found": True, "latitude": 29.9, "longitude": -90.1}
+        if address in self.answers:
+            return self.answers[address]
+        if "Napoleon" in address:
+            return NAPOLEON_CHECK
+        if "Napoheon" in address:
+            return HARVEY_CHECK
+        return HQ_CHECK
 
 
 class FakeResponse:
@@ -64,22 +82,7 @@ class FakeResponse:
         return {"choices": [{"message": self._message}]}
 
 
-def final_answer(fix=None, next_step="approve_fix"):
-    return {
-        "content": json.dumps({
-            "finding": "The ZIP was wrong.",
-            "likely_cause": "Wrong ZIP",
-            "why_it_matters": "Flood rating uses the location.",
-            "has_fix": fix is not None,
-            "proposed_fix": fix or {"line1": "", "city": "", "state": "", "zip5": ""},
-            "next_step": next_step,
-        })
-    }
-
-
 class ScriptedPost:
-    """Returns pre-set AI messages in order and records every payload."""
-
     def __init__(self, messages, status=200):
         self.messages = list(messages)
         self.payloads = []
@@ -90,12 +93,17 @@ class ScriptedPost:
         return FakeResponse(self.messages.pop(0), self.status)
 
 
-def tool_call(name, call_id="c1", address="1700 District Ave, Burlington, MA 01803"):
-    return {"id": call_id, "type": "function", "function": {"name": name, "arguments": json.dumps({"address": address})}}
+def corrections(*candidates):
+    return {"content": json.dumps({"candidates": list(candidates)})}
 
 
-ADDRESS = "1700 District Ave, Burlington, MA 01804"
-FIX = {"line1": "1700 District Ave", "city": "Burlington", "state": "MA", "zip5": "01803"}
+def explanation(next_step="analyst_research"):
+    return {"content": json.dumps({
+        "finding": "The street name was misspelled.",
+        "likely_cause": "Street name typo",
+        "why_it_matters": "Flood rating needs the exact location.",
+        "next_step": next_step,
+    })}
 
 
 def make(route, post, **kwargs):
@@ -117,91 +125,99 @@ def test_flood_summary_keeps_business_fields():
     assert "other" not in summary
 
 
-def test_ai_chosen_tools_then_fix_rechecked_by_precisely(tmp_path):
+def test_typo_case_ai_corrects_and_precisely_confirms(tmp_path):
     route = FakeRoute()
-    post = ScriptedPost([
-        {"content": "", "tool_calls": [tool_call("verify_address")]},
-        {"content": "", "tool_calls": [tool_call("geocode_address", "c2"), tool_call("get_flood_risk", "c3")]},
-        {"content": "done"},
-        final_answer(FIX),
-    ])
+    post = ScriptedPost([corrections(NAPOLEON), explanation()])
     usage = tmp_path / "live_ai" / "usage.jsonl"
-    result = make(route, post, usage_log=usage).investigate(ADDRESS)
-    assert [tool for tool, _ in route.calls] == ["verify_address", "geocode_address", "get_flood_risk", "verify_address"]
-    assert route.calls[-1][1] == "1700 District Ave, Burlington, MA 01803"
+    result = make(route, post, usage_log=usage).investigate(TYPO)
+    assert [tool for tool, _ in route.calls] == ["verify_address", "verify_address", "geocode_address", "get_flood_risk"]
+    assert route.calls[1][1] == "1141 Napoleon Ave Apt 3, New Orleans, LA 70115"
+    assert result.proposed_fix == NAPOLEON
     assert result.fix_confirmed is True
-    assert result.steps[-1].label == "Precisely re-checks the AI's fix"
+    assert result.next_step == "approve_fix"
+    assert "different place" in result.guardrail_note
+    assert any("Precisely checks the AI's correction" in step.label for step in result.steps)
     assert len(usage.read_text().splitlines()) == 4
     assert all("test-key" not in json.dumps(payload) for payload in post.payloads)
 
 
-def test_only_the_address_goes_to_the_ai():
-    post = ScriptedPost([{"content": ""}, final_answer()])
-    result = make(FakeRoute(), post).investigate(ADDRESS)
-    first_user = post.payloads[0]["messages"][1]["content"]
-    assert json.loads(first_user) == {"address_to_investigate": ADDRESS}
-    assert result.ai_input == {"address_to_investigate": ADDRESS, "tools_allowed": list(live_ai.TOOL_ACTIONS)}
-
-
-def test_fixed_order_runs_three_tools_without_ai_choice():
+def test_clean_address_needs_no_correction():
     route = FakeRoute()
-    post = ScriptedPost([final_answer()])
-    result = make(route, post, fixed_order=True).investigate(ADDRESS)
-    assert tuple(tool for tool, _ in route.calls) == FIXED_ORDER
+    post = ScriptedPost([explanation("no_change_needed")])
+    result = make(route, post).investigate(HQ)
+    assert [tool for tool, _ in route.calls] == ["verify_address", "geocode_address", "get_flood_risk"]
     assert result.proposed_fix is None
-    assert "tools" not in post.payloads[0]
+    assert result.next_step == "no_change_needed"
+    assert len(post.payloads) == 1
 
 
-def test_unknown_tool_is_refused():
-    post = ScriptedPost([{"content": "", "tool_calls": [tool_call("delete_everything")]}])
-    with pytest.raises(LiveAIError):
-        make(FakeRoute(), post).investigate(ADDRESS)
+def test_only_the_address_and_precisely_answers_go_to_the_ai():
+    post = ScriptedPost([corrections(), explanation()])
+    result = make(FakeRoute(), post).investigate(TYPO)
+    sent = json.loads(post.payloads[0]["messages"][1]["content"])
+    assert set(sent) == {"task", "address_on_file", "precisely_check_as_given"}
+    assert result.ai_input == {"address_to_investigate": TYPO, "tools_allowed": list(live_ai.TOOL_ACTIONS)}
+
+
+def test_correction_that_changes_the_house_is_blocked():
+    route = FakeRoute()
+    other_house = {**NAPOLEON, "line1": "1143 Napoleon Ave Apt 3"}
+    post = ScriptedPost([corrections(other_house), explanation()])
+    result = make(route, post).investigate(TYPO)
+    assert [tool for tool, _ in route.calls] == ["verify_address"]
+    assert result.proposed_fix is None
+    assert result.next_step == "analyst_research"
+
+
+def test_unconfirmed_correction_cannot_be_approved():
+    unconfirmed = {"found": True, "score": 40, "street_line": "1141 NAPOLEON AVE"}
+    route = FakeRoute(answers={"1141 Napoleon Ave Apt 3, New Orleans, LA 70115": unconfirmed})
+    post = ScriptedPost([corrections(NAPOLEON), explanation()])
+    result = make(route, post).investigate(TYPO)
+    assert result.proposed_fix is None
+    assert result.fix_confirmed is False
+    assert result.next_step == "analyst_research"
+
+
+def test_customer_outreach_suggestion_is_kept_when_no_fix():
+    post = ScriptedPost([corrections(), explanation("customer_outreach")])
+    result = make(FakeRoute(), post).investigate(TYPO)
+    assert result.next_step == "customer_outreach"
 
 
 def test_tool_call_cap_is_enforced():
-    loop = [{"content": "", "tool_calls": [tool_call("verify_address", f"c{i}")]} for i in range(MAX_TOOL_CALLS + 2)]
+    investigator = make(FakeRoute(), ScriptedPost([]))
+    investigation = live_ai.Investigation(address=HQ, route="r", model="m", tool_calls=MAX_TOOL_CALLS)
     with pytest.raises(LiveAIError):
-        make(FakeRoute(), ScriptedPost(loop)).investigate(ADDRESS)
+        investigator._run_tool("verify_address", HQ, 0, investigation)
 
 
-def test_ai_cannot_point_tools_at_another_house_or_state():
-    route = FakeRoute()
-    post = ScriptedPost([
-        {"content": "", "tool_calls": [tool_call("verify_address", address="10 Other St, Boston, MA 02110")]},
-        {"content": ""},
-        final_answer(),
-    ])
-    make(route, post).investigate(ADDRESS)
-    assert route.calls == [("verify_address", ADDRESS)]
-
-
-def test_ai_may_test_its_own_corrected_spelling():
-    original = "1141 Napoheon Ave, New Orleans, LA, 70115"
-    corrected = "1141 Napoleon Ave, New Orleans, LA 70115"
-    route = FakeRoute()
-    post = ScriptedPost([
-        {"content": "", "tool_calls": [tool_call("verify_address", address=corrected)]},
-        {"content": ""},
-        final_answer(),
-    ])
-    make(route, post).investigate(original)
-    assert route.calls == [("verify_address", corrected)]
+def test_unknown_tool_is_refused():
+    investigator = make(FakeRoute(), ScriptedPost([]))
+    with pytest.raises(LiveAIError):
+        investigator._run_tool("delete_everything", HQ, 0, live_ai.Investigation(address=HQ, route="r", model="m"))
 
 
 def test_timeout_raises_for_fallback():
-    ticks = iter([0, 0, 25, 25, 25, 25])
+    ticks = iter([0] + [25] * 20)
     with pytest.raises(LiveAIError):
-        make(FakeRoute(), ScriptedPost([final_answer()]), fixed_order=True, clock=lambda: next(ticks)).investigate(ADDRESS)
+        make(FakeRoute(), ScriptedPost([explanation()]), clock=lambda: next(ticks)).investigate(HQ)
 
 
 def test_service_failure_raises_for_fallback():
     with pytest.raises(LiveAIError):
-        make(FakeRoute(fail_on="geocode_address"), ScriptedPost([final_answer()]), fixed_order=True).investigate(ADDRESS)
+        make(FakeRoute(fail_on="geocode_address"), ScriptedPost([explanation()])).investigate(HQ)
 
 
 def test_ai_error_status_raises_for_fallback():
     with pytest.raises(LiveAIError):
-        make(FakeRoute(), ScriptedPost([{"content": ""}], status=500)).investigate(ADDRESS)
+        make(FakeRoute(), ScriptedPost([corrections()], status=500)).investigate(TYPO)
+
+
+def test_ai_requests_use_low_reasoning_effort():
+    post = ScriptedPost([explanation("no_change_needed")])
+    make(FakeRoute(), post).investigate(HQ)
+    assert post.payloads[0]["reasoning_effort"] == "low"
 
 
 @pytest.mark.parametrize(
@@ -213,29 +229,26 @@ def test_ai_error_status_raises_for_fallback():
         ({"line1": "1700 New Orleans Ave", "city": "Harvey", "state": "MA", "zip5": "01803"}, False),
     ],
 )
-def test_guardrails_on_house_number_and_state(fix, kept):
+def test_guardrails_on_house_number_state_and_place(fix, kept):
     result, note = check_fix_guardrails(fix, "1700 District Ave, Burlington, MA 01804")
     assert (result is not None) is kept
     assert bool(note) is not kept
 
 
-def test_unconfirmed_fix_is_labelled_not_confirmed():
-    class NoMatchRoute(FakeRoute):
-        def call(self, tool, address):
-            out = super().call(tool, address)
-            return {**out, "street_line": "SOMETHING ELSE"} if "01803" in address else out
-
-    post = ScriptedPost([final_answer(FIX)])
-    result = make(NoMatchRoute(), post, fixed_order=True).investigate(ADDRESS)
-    assert result.fix_confirmed is False
+def test_confirmation_needs_same_house_and_street():
+    assert confirms_address(NAPOLEON_CHECK, "1141 Napoleon Ave Apt 3, New Orleans, LA 70115")
+    assert not confirms_address(HARVEY_CHECK, TYPO)
+    assert not confirms_address({"found": False}, TYPO)
 
 
 def test_decision_log_records_without_touching_anything_else(tmp_path):
     log = tmp_path / "live_ai" / "decisions.jsonl"
-    entry = record_decision(log, case_id="POL-1", decision="approved", investigation={"address": "a", "proposed_fix": FIX, "fix_confirmed": True})
+    entry = record_decision(log, case_id="POL-1", decision="approved", investigation={"address": "a", "proposed_fix": NAPOLEON, "fix_confirmed": True})
     assert entry["decision"] == "approved"
     assert json.loads(log.read_text())["case"] == "POL-1"
     assert [p.name for p in tmp_path.rglob("*") if p.is_file()] == ["decisions.jsonl"]
+    for decision in ("sent_to_research", "sent_to_customer", "reviewed", "rejected"):
+        record_decision(log, case_id="x", decision=decision, investigation={})
     with pytest.raises(ValueError):
         record_decision(log, case_id="x", decision="maybe", investigation={})
 
@@ -264,42 +277,10 @@ def test_live_settings_and_readiness(tmp_path, monkeypatch):
     for name in ("AIP_LIVE_AI", "AIP_LIVE_ROUTE", "AIP_LIVE_ORDER", "PRECISELY_MCP_APP_TOKEN", "GROQ_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     (tmp_path / ".env").write_text("GROQ_API_KEY=g\nPRECISELY_MCP_APP_TOKEN=t\n", encoding="utf-8")
-    settings = live_panel.live_settings(tmp_path)
-    assert settings["enabled"] is False
+    assert live_panel.live_settings(tmp_path)["enabled"] is False
     monkeypatch.setenv("AIP_LIVE_AI", "1")
-    monkeypatch.setenv("AIP_LIVE_ORDER", "fixed")
     settings = live_panel.live_settings(tmp_path)
-    assert settings["enabled"] and settings["fixed_order"] and settings["route"] == "mcp"
+    assert settings["enabled"] and settings["route"] == "mcp"
     assert live_panel._ready(settings)
     assert not live_panel._ready({**settings, "groq_key": ""})
     assert not live_panel._ready({**settings, "route": "direct", "has_direct_keys": False})
-
-
-def test_different_place_guardrail_on_the_gate_1_case():
-    original = "1141 Napoheon Ave, New Orleans, LA, 70115"
-    harvey = {"line1": "1141 New Orleans Ave", "city": "Harvey", "state": "LA", "zip5": "70058"}
-    napoleon = {"line1": "1141 Napoleon Ave", "city": "New Orleans", "state": "LA", "zip5": "70115"}
-    fix, note = check_fix_guardrails(harvey, original)
-    assert fix is None and "different place" in note
-    fix, note = check_fix_guardrails(napoleon, original)
-    assert fix == napoleon and note == ""
-
-
-def test_guardrail_sends_a_dropped_fix_to_research():
-    harvey = {"line1": "1141 New Orleans Ave", "city": "Harvey", "state": "LA", "zip5": "70058"}
-    post = ScriptedPost([final_answer(harvey, next_step="approve_fix")])
-    result = make(FakeRoute(), post, fixed_order=True).investigate("1141 Napoheon Ave, New Orleans, LA, 70115")
-    assert result.proposed_fix is None
-    assert result.next_step == "analyst_research"
-
-
-def test_ai_requests_use_low_reasoning_effort():
-    post = ScriptedPost([final_answer()])
-    make(FakeRoute(), post, fixed_order=True).investigate(ADDRESS)
-    assert post.payloads[0]["reasoning_effort"] == "low"
-
-
-def test_send_to_research_decision_is_recorded(tmp_path):
-    log = tmp_path / "decisions.jsonl"
-    entry = record_decision(log, case_id="POL-2", decision="sent_to_research", investigation={})
-    assert entry["decision"] == "sent_to_research"
