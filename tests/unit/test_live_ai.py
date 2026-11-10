@@ -309,3 +309,44 @@ def test_precision_codes_in_plain_words():
 
 def test_finds_precisely_id_anywhere():
     assert live_ai.find_precisely_id({"a": {"customFields": {"PB_KEY": "P1"}}}) == "P1"
+
+
+def test_backup_route_builds_with_the_credit_cap(monkeypatch):
+    import sys
+    from pathlib import Path
+    from decimal import Decimal
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "app"))
+    import live_panel
+    from address_intelligence import config
+
+    class FakeSettings:
+        credit_hard_cap = Decimal("2150")
+
+    monkeypatch.setattr(config.Settings, "from_env", classmethod(lambda cls, **kw: FakeSettings()))
+    route = live_panel._build_route({"route": "direct", "mcp_token": ""})
+    assert isinstance(route, live_ai.DirectRoute)
+    assert route.client.ledger.hard_cap == Decimal("2150")
+
+
+def test_direct_geocode_shape_is_understood():
+    payload = {"candidates": [{
+        "formattedStreetAddress": "1700 DISTRICT AVE",
+        "formattedLocationAddress": "BURLINGTON, MA 01803",
+        "precisionCode": "S8HPNTSCZA",
+        "geometry": {"coordinates": [-71.2, 42.5]},
+        "address": {"areaName1": "MA", "areaName3": "BURLINGTON", "postCode1": "01803", "mainAddressLine": "1700 DISTRICT AVE"},
+    }]}
+    summary = summarize_address_result(payload)
+    assert summary["score"] == 100
+    assert summary["street_line"] == "1700 DISTRICT AVE"
+    assert summary["city"] == "BURLINGTON" and summary["state"] == "MA" and summary["zip5"] == "01803"
+    assert summary["latitude"] == 42.5
+    assert confirms_address(summary, "1700 District Ave, Burlington, MA 01803")
+
+
+def test_direct_flood_shape_is_understood():
+    payload = {"floodZone": {"code": "X", "riskLevel": "Low", "baseFloodElevation": None}, "community": {"communityStatus": "R"}}
+    summary = summarize_flood_result(payload)
+    assert summary["Flood zone"] == "X"
+    assert summary["Flood risk level"] == "Low"

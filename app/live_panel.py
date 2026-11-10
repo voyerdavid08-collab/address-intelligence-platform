@@ -74,7 +74,10 @@ def _build_route(settings: dict[str, Any]):
         from address_intelligence.credits import CreditLedger
         from address_intelligence.providers.precisely import PreciselyClient
 
-        return DirectRoute(PreciselyClient(Settings.from_env(), CreditLedger()))
+        precisely_settings = Settings.from_env()
+        return DirectRoute(
+            PreciselyClient(precisely_settings, CreditLedger(precisely_settings.credit_hard_cap))
+        )
     return McpRoute(settings["mcp_token"])
 
 

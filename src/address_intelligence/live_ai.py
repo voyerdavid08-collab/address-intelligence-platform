@@ -140,9 +140,18 @@ def summarize_address_result(payload: Any) -> dict[str, Any]:
     if not candidate:
         return {"found": False}
     address = candidate.get("address") or {}
-    custom = candidate.get("customFields") or {}
+    custom = candidate.get("customFields") or address.get("customFields") or {}
     location = candidate.get("location") or {}
-    coordinates = (location.get("feature") or {}).get("geometry", {}).get("coordinates") or []
+    coordinates = (
+        (location.get("feature") or {}).get("geometry", {}).get("coordinates")
+        or (candidate.get("geometry") or {}).get("coordinates")
+        or []
+    )
+    precision = candidate.get("precisionCode") or custom.get("PRECISION_CODE") or custom.get("LOC_CODE")
+    score = candidate.get("score")
+    if score is None and precision:
+        # The direct Geocode API returns no score; derive one from the precision code.
+        score = 100 if precision.startswith("S8") else 90 if precision[:2] in ("S5", "S6", "S7") else 50
     explanation = ((candidate.get("explanation") or {}).get("addressMatch") or {}).get("description") or []
     mismatched = [
         item.get("label")
@@ -152,16 +161,17 @@ def summarize_address_result(payload: Any) -> dict[str, Any]:
     summary = {
         "found": True,
         "status": candidate.get("status"),
-        "score": candidate.get("score"),
-        "standardized_address": address.get("formattedAddress") or candidate.get("formattedAddress"),
-        "street_line": address.get("formattedStreetAddress"),
+        "score": score,
+        "standardized_address": address.get("formattedAddress") or candidate.get("formattedAddress")
+        or ", ".join(x for x in (candidate.get("formattedStreetAddress"), candidate.get("formattedLocationAddress")) if x),
+        "street_line": address.get("formattedStreetAddress") or candidate.get("formattedStreetAddress") or address.get("mainAddressLine"),
         "house_number": address.get("addressNumber"),
-        "city": (address.get("city") or {}).get("longName") if isinstance(address.get("city"), dict) else address.get("city"),
-        "state": (address.get("admin1") or {}).get("shortName") if isinstance(address.get("admin1"), dict) else address.get("admin1"),
-        "zip5": address.get("postalCode"),
+        "city": (address.get("city") or {}).get("longName") if isinstance(address.get("city"), dict) else (address.get("city") or address.get("areaName3")),
+        "state": (address.get("admin1") or {}).get("shortName") if isinstance(address.get("admin1"), dict) else (address.get("admin1") or address.get("areaName1")),
+        "zip5": address.get("postalCode") or address.get("postCode1"),
         "zip4": address.get("postalCodeExt"),
         "match_code": custom.get("MATCH_CODE"),
-        "precision_code": custom.get("PRECISION_CODE") or custom.get("LOC_CODE"),
+        "precision_code": precision,
         "precisely_id": custom.get("PB_KEY"),
         "fields_corrected": mismatched,
     }
@@ -208,6 +218,9 @@ def summarize_flood_result(payload: Any) -> dict[str, Any]:
         if not re.search(r"(metadata|geometry|coordinates|credits|query|cursor|status$)", key, re.IGNORECASE)
     }
     kept: dict[str, Any] = {}
+    for key, value in flat.items():
+        if key.lower().endswith(("floodzone.code", "floodzone.primaryzone")) and "Flood zone" not in kept:
+            kept["Flood zone"] = value
     for needle, label in FLOOD_FIELDS:
         for key, value in flat.items():
             last = key.split(".")[-1].lower().replace("_", "")
