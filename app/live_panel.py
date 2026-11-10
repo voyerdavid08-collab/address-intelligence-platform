@@ -128,9 +128,8 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
     lines = []
     if data.get("located"):
         lines.append(f"<b>Located:</b> {escape(data['located'])}")
-    for key, value in list((data.get("flood") or {}).items())[:3]:
-        label = re.sub(r"([a-z])([A-Z])", r"\1 \2", key.split(".")[-1]).replace("_", " ").capitalize()
-        lines.append(f"<b>{escape(label)}:</b> {escape(str(value))}")
+    for key, value in list((data.get("flood") or {}).items())[:4]:
+        lines.append(f"<b>{escape(str(key))}:</b> {escape(str(value))}")
     if data.get("precisely_id"):
         lines.append(f"<b>PreciselyID:</b> {escape(data['precisely_id'])}")
     if lines:

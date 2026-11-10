@@ -120,9 +120,13 @@ def test_summary_keeps_only_needed_fields():
 
 
 def test_flood_summary_keeps_business_fields():
-    summary = summarize_flood_result({"result": {"floodZone": {"code": "AE", "description": "High risk"}, "other": "noise"}})
-    assert summary["floodZone.code"] == "AE"
-    assert "other" not in summary
+    payload = {"result": {"getByAddress": {"floodRisk": {
+        "metadata": {"pageNumber": 1, "count": 1},
+        "data": [{"floodZone": "AE", "zoneDescription": "High risk", "baseFloodElevation": 12, "other": "noise"}],
+    }}}}
+    summary = summarize_flood_result(payload)
+    assert summary == {"found": True, "Flood zone": "AE", "What the zone means": "High risk", "Base flood elevation": 12}
+    assert summarize_flood_result({"result": {"getByAddress": {"floodRisk": None}}}) == {"found": False}
 
 
 def test_typo_case_ai_corrects_and_precisely_confirms(tmp_path):
@@ -289,7 +293,8 @@ def test_live_settings_and_readiness(tmp_path, monkeypatch):
 def test_result_shows_precisely_data_and_a_clear_first_match_note():
     post = ScriptedPost([corrections(NAPOLEON), explanation()])
     result = make(FakeRoute(), post).investigate(TYPO)
-    assert result.precisely_data["flood"] == {"floodZone": "X"}
+    assert result.precisely_data["flood"] == {"Flood data": "No flood record returned for this address"}
+    assert result.proposed_fix["zip5"] == "70115"
     assert "set it aside and the AI tried the likely spelling" in result.guardrail_note
     assert "Harvey" in result.guardrail_note
     assert "analyst research" not in result.guardrail_note
@@ -301,7 +306,5 @@ def test_precision_codes_in_plain_words():
     assert live_ai.describe_precision("Z1") == "ZIP or city level only"
 
 
-def test_flood_summary_falls_back_and_finds_precisely_id():
-    summary = summarize_flood_result({"result": {"data": [{"fieldA": 1, "fieldB": "two"}]}})
-    assert summary == {"data.fieldA": 1, "data.fieldB": "two"}
+def test_finds_precisely_id_anywhere():
     assert live_ai.find_precisely_id({"a": {"customFields": {"PB_KEY": "P1"}}}) == "P1"

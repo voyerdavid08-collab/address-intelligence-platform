@@ -185,22 +185,42 @@ def _flatten(value: Any, prefix: str = "", out: dict[str, Any] | None = None) ->
     return out
 
 
+FLOOD_FIELDS = (
+    ("floodzone", "Flood zone"),
+    ("zonedescription", "What the zone means"),
+    ("zonedesc", "What the zone means"),
+    ("sfha", "Special flood hazard area"),
+    ("riskLevel", "Flood risk level"),
+    ("basefloodelevation", "Base flood elevation"),
+    ("distancetonearestwaterbody", "Distance to nearest water"),
+    ("distanceto100", "Distance to 100-year flood zone"),
+    ("distanceto500", "Distance to 500-year flood zone"),
+    ("communitystatus", "Community status"),
+)
+
+
 def summarize_flood_result(payload: Any) -> dict[str, Any]:
-    """Keep the flood fields a business reader understands; drop everything else."""
+    """Keep the flood fields a business reader understands, with plain labels."""
     result = payload.get("result", payload) if isinstance(payload, dict) else {}
     flat = {
         key: value
         for key, value in _flatten(result).items()
-        if not re.search(r"(geometry|coordinates|credits|query|id$|^action)", key, re.IGNORECASE)
+        if not re.search(r"(metadata|geometry|coordinates|credits|query|cursor|status$)", key, re.IGNORECASE)
     }
-    wanted = re.compile(
-        r"(zone|risk|sfha|baseFlood|waterbody|100|500|communityStatus|elevation)",
-        re.IGNORECASE,
-    )
-    kept = {key: value for key, value in flat.items() if wanted.search(key)}
+    kept: dict[str, Any] = {}
+    for needle, label in FLOOD_FIELDS:
+        for key, value in flat.items():
+            last = key.split(".")[-1].lower().replace("_", "")
+            if needle.lower() in last and label not in kept:
+                kept[label] = value
+                break
     if not kept:
-        kept = flat
-    return dict(list(kept.items())[:10]) or {"found": False}
+        for key, value in list(flat.items())[:3]:
+            last = key.split(".")[-1]
+            kept[re.sub(r"([a-z])([A-Z])", r"\1 \2", last).replace("_", " ").capitalize()] = value
+    if not kept:
+        return {"found": False}
+    return {"found": True, **kept}
 
 
 def find_precisely_id(payload: Any) -> str:
@@ -743,6 +763,12 @@ class Investigator:
                 ok = confirms_address(check, text)
                 tried.append({"candidate": text, "precisely_check": check, "confirmed": ok})
                 if ok:
+                    kept = {
+                        "line1": kept.get("line1", ""),
+                        "city": (check.get("city") or kept.get("city", "")).title(),
+                        "state": (check.get("state") or kept.get("state", "")).upper(),
+                        "zip5": check.get("zip5") or kept.get("zip5", ""),
+                    }
                     investigation.proposed_fix = kept
                     investigation.fix_check = check
                     investigation.fix_confirmed = True
@@ -758,9 +784,15 @@ class Investigator:
                     address,
                 )
                 if place_note:
-                    where = ", ".join(x for x in (as_given.get("street_line", ""), as_given.get("city", ""), as_given.get("state", "")) if x)
+                    where = ", ".join(
+                        x for x in (
+                            as_given.get("street_line", "").title(),
+                            as_given.get("city", "").title(),
+                            as_given.get("state", "").upper(),
+                        ) if x
+                    )
                     investigation.guardrail_note = (
-                        f"Precisely's first match for the address as written was a different place ({where.title()}), "
+                        f"Precisely's first match for the address as written was a different place ({where}), "
                         "so the guardrail set it aside"
                         + (" and the AI tried the likely spelling." if investigation.fix_confirmed else ". This goes to analyst research.")
                     )
@@ -776,7 +808,11 @@ class Investigator:
             if located.get("found"):
                 flood = self._run_tool("get_flood_risk", best, start, investigation)
                 evidence["precisely_flood"] = flood
-                investigation.precisely_data["flood"] = {k: v for k, v in flood.items() if k != "found"}
+                investigation.precisely_data["flood"] = (
+                    {k: v for k, v in flood.items() if k != "found"}
+                    if flood.get("found")
+                    else {"Flood data": "No flood record returned for this address"}
+                )
 
         self._check_time(start)
         began = self.clock()
