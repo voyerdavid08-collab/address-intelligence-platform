@@ -379,3 +379,49 @@ def test_real_save_io_error_is_reported_without_traceback(sales_app, monkeypatch
     assert any(item.value == message for item in getattr(app, element))
     assert not any("Work list saved to:" in item.value for item in app.success)
     assert "private operating system detail" not in markup(app)
+
+
+def test_approving_a_confirmed_fix_logs_it_and_builds_the_corrections_file(sales_app, monkeypatch, tmp_path):
+    from address_intelligence import worklist_decisions
+
+    log = tmp_path / "decisions" / "worklist_decisions.jsonl"
+    monkeypatch.setattr(worklist_decisions, "decision_log_path", lambda run_dir: log)
+    app = sales_app.app
+    next(w for w in app.radio if w.label == "Show:").set_value("Real results on this computer").run(timeout=30)
+    assert not app.exception
+    assert "Address to approve: **1 Corrected St, Alpha City, TX 75001**" in markup(app)
+    assert any("No approved changes yet" in item.value for item in app.caption)
+
+    next(b for b in app.button if b.label == "Approve the fix").click().run(timeout=30)
+    assert not app.exception
+    table = next(frame for frame in app.dataframe if frame.key and frame.key.startswith("exceptions_table_"))
+    assert "001" not in list(table.value["Policy ID"])
+    assert any("001 approved. It has left the open work list." in item.value for item in app.success)
+    entry = json.loads(log.read_text(encoding="utf-8").splitlines()[0])
+    assert entry["policy_id"] == "001" and entry["decision"] == "approved"
+    assert entry["corrected_address"] == "1 Corrected St, Alpha City, TX 75001"
+    corrections = frame_with(app, "Corrected address")
+    assert list(corrections["Policy ID"]) == ["001"]
+    assert any(item.label == "Save corrections file to the client folder" for item in app.button)
+
+    next(b for b in app.button if b.label == "Undo").click().run(timeout=30)
+    assert not app.exception
+    table = next(frame for frame in app.dataframe if frame.key and frame.key.startswith("exceptions_table_"))
+    assert "001" in list(table.value["Policy ID"])
+    assert [json.loads(line)["decision"] for line in log.read_text(encoding="utf-8").splitlines()] == ["approved", "undone"]
+
+
+def test_made_up_mode_keeps_decisions_in_the_session_only(sales_app, monkeypatch):
+    from address_intelligence import worklist_decisions
+
+    def no_file(*args, **kwargs):
+        raise AssertionError("made-up mode must not write the audit log")
+
+    monkeypatch.setattr(worklist_decisions, "append_log", no_file)
+    app = sales_app.app
+    approve = [b for b in app.button if b.label == "Approve the fix"]
+    if not approve:
+        pytest.skip("the first made-up case has no confirmed fix")
+    approve[0].click().run(timeout=30)
+    assert not app.exception
+    assert any(item.label == "Download corrections file (Excel)" for item in app.get("download_button"))

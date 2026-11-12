@@ -606,6 +606,7 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
         summary = str(row.get("narrative") or "")
         summary = (summary
             .replace("could not be verified to building level", "was located only to the ZIP or city")
+            .replace("The location was located only", "The address was located only")
             .replace("Flood enrichment was withheld pending address remediation.", "Flood data is on hold until the address is approved.")
             .replace("Flood enrichment was withheld pending address remediation", "Flood data is on hold until the address is approved."))
         result.append({

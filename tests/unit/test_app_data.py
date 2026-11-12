@@ -177,7 +177,7 @@ def test_kpi_tile_deltas_are_derived_from_fixture_csv(tmp_path):
     assert tiles[1]["delta"] == "+31 records vs before"
     assert tiles[2]["label"] == "City-level location changes flood-risk tier"
     assert tiles[2]["value"] == "14/39"
-    assert tiles[2]["delta"] == "6 under-priced, 8 over-priced"
+    assert tiles[2]["delta"] == "6 under-rated, 8 over-rated"
     assert tiles[2]["delta_color"] == "off"
     assert tiles[3]["delta"] == "0 incorrect"
     assert tiles[3]["delta_color"] == "off"

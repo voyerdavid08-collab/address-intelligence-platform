@@ -100,7 +100,13 @@ def _panel(label: str, body_html: str, *, tinted: bool = False) -> str:
     )
 
 
-def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path | None) -> None:
+def render_result(
+    result: dict[str, Any],
+    *,
+    case_key: str,
+    decision_log: Path | None,
+    on_decision: Callable[[str, dict[str, Any]], None] | None = None,
+) -> None:
     """Show a finished investigation: finding, fix, Precisely's re-check, flow, limits, decision."""
     fix = result.get("proposed_fix")
     fix_text = format_fix(fix) if fix else ""
@@ -189,6 +195,8 @@ def render_result(result: dict[str, Any], *, case_key: str, decision_log: Path |
                 decision = "sent_to_research"
     if decision:
         record_decision(decision_log, case_id=case_key, decision=decision, investigation=result)
+        if on_decision is not None:
+            on_decision(decision, result)
         st.session_state[f"live_decision_{case_key}"] = decision
     recorded = st.session_state.get(f"live_decision_{case_key}")
     if recorded:
@@ -211,6 +219,8 @@ def render_investigate(
     run_dir: Path,
     saved_fallback: Callable[[], None] | None = None,
     allow_typed: bool = False,
+    record_decisions: bool = True,
+    on_decision: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> None:
     """The Investigate control and its result, for one case or a typed address."""
     settings = live_settings(root)
@@ -319,7 +329,8 @@ def render_investigate(
     render_result(
         result,
         case_key=case_key,
-        decision_log=(run_dir / "live_ai" / "decisions.jsonl") if real_mode else None,
+        decision_log=(run_dir / "live_ai" / "decisions.jsonl") if real_mode and record_decisions else None,
+        on_decision=on_decision,
     )
 
 

@@ -5,6 +5,8 @@ Checks, in order:
 2. Precisely's AI Studio MCP connector: connect, list its tools, and describe the
    three actions the app uses. Describing is free.
 3. The AI service key (Groq), by listing its models. Free.
+4. Resets the work list for the demo: decision logs are moved aside (never deleted),
+   so every approved case is back on the list. Use --keep-decisions to skip this.
 
 With --live, it also runs ONE real investigation on Precisely's HQ, keyed in with
 three errors, and reports the time. That uses about 4 AI Studio credits, so only
@@ -26,6 +28,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from dotenv import dotenv_values  # noqa: E402
 
 from address_intelligence.live_ai import MCP_URL, TOOL_ACTIONS  # noqa: E402
+from address_intelligence.worklist_decisions import archive_logs  # noqa: E402
 
 DEMO_ADDRESS = "1700 Distrct Avenu, Burlingtn, MA 01840"
 REQUIRED = ("PRECISELY_MCP_APP_TOKEN", "GROQ_API_KEY", "AIP_LIVE_AI")
@@ -116,6 +119,7 @@ def run_live(values: dict[str, str | None]) -> tuple[str, bool, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--live", action="store_true", help="also run one paid demo investigation")
+    parser.add_argument("--keep-decisions", action="store_true", help="keep the analyst decisions on the work list")
     args = parser.parse_args(argv)
 
     values = dotenv_values(ROOT / ".env")
@@ -127,6 +131,13 @@ def main(argv: list[str] | None = None) -> int:
             rows.append(("Connector reachable", False, type(error).__name__))
     if values.get("GROQ_API_KEY"):
         rows.append(check_ai(values["GROQ_API_KEY"]))
+    if not args.keep_decisions:
+        moved = archive_logs(ROOT / "data" / "output")
+        rows.append((
+            "Work list reset",
+            True,
+            f"{len(moved)} decision log(s) moved aside" if moved else "already fresh",
+        ))
     if args.live:
         try:
             rows.append(run_live(values))

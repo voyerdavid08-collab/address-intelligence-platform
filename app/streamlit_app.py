@@ -49,6 +49,7 @@ from address_intelligence.app_data import (
     work_path,
 )
 from address_intelligence.client_profile import DEFAULT_PROFILE_PATH, load_client_profile
+from address_intelligence import worklist_decisions as decisions_lib
 from address_intelligence.onboarding import (
     CANONICAL_COLUMNS,
     REQUIRED_COLUMNS,
@@ -205,8 +206,8 @@ def _build_kpi_tile_values(summary_path: Path) -> list[dict[str, str | int]]:
             "label": "City-level location changes flood-risk tier",
             "value": flood_value,
             "delta": (
-                f"{metric_count('Coarse location understated verified risk')} under-priced, "
-                f"{metric_count('Coarse location overstated verified risk')} over-priced"
+                f"{metric_count('Coarse location understated verified risk')} under-rated, "
+                f"{metric_count('Coarse location overstated verified risk')} over-rated"
             ),
             "delta_color": "off",
             "caption": "",
@@ -306,6 +307,114 @@ def _case_panels_html(
         f'<div class="ai-case-panels" style="display:grid;'
         f'grid-template-columns:repeat({len(panels) if help_labels else min(2, len(panels))},minmax(0,1fr));gap:12px">{panel_html}</div>'
     )
+
+
+def _record_worklist_decision(entry: dict[str, Any], log_path: Path | None) -> None:
+    if log_path is None:
+        st.session_state.setdefault("made_up_worklist_decisions", []).append(entry)
+    else:
+        decisions_lib.append_log(log_path, entry)
+
+
+def _render_decision_box(case: dict[str, Any], log_path: Path | None) -> None:
+    """Approve or reject a fix that Precisely confirmed, with the unit kept from the file."""
+    display = format_sales_worklist_rows([case])[0]
+    policy_id = display["Policy ID"]
+    parts = decisions_lib.corrected_address(case.get("suggestion") or {}, case.get("input_address"))
+    with st.container(border=True):
+        st.markdown("**Analyst decision**")
+        st.markdown(f"Address to approve: **{escape(decisions_lib.format_address(parts))}**", unsafe_allow_html=True)
+        if decisions_lib.unit_kept(parts):
+            st.caption(f"Unit kept from the address on file ({parts['line2']}).")
+        st.caption(
+            "Approving logs the decision for audit and adds the address to the corrections file. "
+            "Nothing changes in a policy record here."
+        )
+        approve_column, reject_column = st.columns(2)
+        decision = None
+        if approve_column.button("Approve the fix", key=f"wl_approve_{policy_id}", type="primary", icon=":material/check:"):
+            decision = "approved"
+        if reject_column.button("Reject: send to research", key=f"wl_reject_{policy_id}", icon=":material/manage_search:"):
+            decision = "rejected"
+        if decision:
+            entry = decisions_lib.decision_entry(
+                policy_id=policy_id,
+                decision=decision,
+                address_on_file=display["Address on file"],
+                corrected=parts,
+                confirmed_by_precisely=True,
+                source="Overnight run",
+            )
+            _record_worklist_decision(entry, log_path)
+            st.session_state["just_decided"] = entry
+            st.rerun()
+
+
+def _render_decision_confirmation(entry: dict[str, Any], log_path: Path | None) -> None:
+    policy_id = entry["policy_id"]
+    with st.container(border=True):
+        if entry["decision"] == "approved":
+            st.success(f"{policy_id} approved. It has left the open work list.")
+            st.markdown(f"**Corrected address:** {escape(entry['corrected_address'])}", unsafe_allow_html=True)
+        else:
+            st.info(f"{policy_id}: fix rejected and sent to research. It stays on the work list.")
+        when = entry["time"].replace("T", " ").replace("+00:00", "")
+        st.caption(
+            f"Logged for audit at {when} UTC: who decided, the address before and after, "
+            "and Precisely's confirmation."
+        )
+        if st.button("Undo", key=f"wl_undo_{policy_id}", icon=":material/undo:"):
+            _record_worklist_decision(
+                decisions_lib.decision_entry(
+                    policy_id=policy_id, decision="undone", address_on_file=entry["address_on_file"]
+                ),
+                log_path,
+            )
+            st.session_state.pop("just_decided", None)
+            st.rerun()
+
+
+def _render_corrections(latest: dict[str, dict[str, Any]], demo_mode: bool, run_dir: Path) -> None:
+    rows = decisions_lib.corrections_rows(latest)
+    st.subheader("Approved changes for your systems", anchor=False)
+    st.write(
+        "Every approved fix, ready to load into the policy system. In the pilot, it's this file. "
+        "In production, the same changes go through an API or a scheduled load. Each decision is also in the audit log."
+    )
+    if not rows:
+        st.caption("No approved changes yet. Approve a confirmed fix to add it here.")
+        return
+    st.dataframe(
+        [{key: row[key] for key in ("Policy ID", "Address on file", "Corrected address", "Approved (UTC)")} for row in rows],
+        hide_index=True,
+        width="stretch",
+    )
+    if demo_mode:
+        try:
+            st.download_button(
+                "Download corrections file (Excel)",
+                data=decisions_lib.made_up_corrections_workbook(rows),
+                file_name="made-up-corrections.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                icon=":material/download:",
+            )
+        except ValueError as error:
+            st.error(str(error))
+        return
+    if st.button("Save corrections file to the client folder", key="save_corrections", icon=":material/save:"):
+        try:
+            saved = decisions_lib.save_real_corrections(rows, run_dir, ROOT / "data" / "output")
+        except ValueError as error:
+            st.error(str(error))
+        except PermissionError:
+            st.warning("The corrections file is open in Excel. Close it, then save again.")
+        except OSError:
+            st.error("The corrections file could not be saved. Check that the client folder is available.")
+        else:
+            st.session_state.corrections_path = str(saved)
+    saved_path = st.session_state.get("corrections_path")
+    if saved_path:
+        st.success(f"Corrections file saved to: {Path(saved_path).resolve()}")
 
 
 def _render_exception_detail(detail: dict[str, Any]) -> None:
@@ -1116,6 +1225,14 @@ with results_tab:
                 st.warning(f"Addresses on file cannot be matched: {error}")
                 queue = [{**row, "input_address": {}} for row in queue]
         queue = sort_sales_worklist(queue)
+        if demo_mode:
+            decision_log = None
+            decision_entries = st.session_state.setdefault("made_up_worklist_decisions", [])
+        else:
+            decision_log = decisions_lib.decision_log_path(profile.run_dir)
+            decision_entries = decisions_lib.read_log(decision_log)
+        latest_decisions = decisions_lib.latest_decisions(decision_entries)
+        queue = decisions_lib.open_cases(queue, latest_decisions)
         has_input_address = not demo_mode or any(
             row["Address on file"] for row in format_sales_worklist_rows(queue)
         )
@@ -1156,6 +1273,8 @@ with results_tab:
             for row in formatted_rows
         ]
         st.caption(sales_worklist_count_line(filtered))
+        selected_rows: list[Any] = []
+        index = 0
         if filtered:
             table_identity = repr(
                 (str(profile_path), display_mode, action_filter, verification_filter, filtered)
@@ -1227,33 +1346,66 @@ with results_tab:
                     if not open_folder(full_path.parent):
                         st.info(f"Open this folder on your computer: {full_path.parent}")
 
-        if filtered:
+        just_decided = st.session_state.get("just_decided")
+        if just_decided and selected_rows:
+            st.session_state.pop("just_decided", None)
+            just_decided = None
+        live_enabled = live_panel.live_settings(ROOT)["enabled"]
+        if just_decided:
+            _render_decision_confirmation(just_decided, decision_log)
+        elif filtered:
             selected_case = filtered[index]
             _render_exception_detail(selected_case)
-            if live_panel.live_settings(ROOT)["enabled"]:
-                already_confirmed = (
-                    str(selected_case.get("verification_status", "")).strip().casefold() == "verified by precisely"
-                )
-                # Offer a live investigation only where the overnight run left work to do.
-                if selected_case.get("next_action") == "analyst_review" and not already_confirmed:
-                    with st.container(border=True):
-                        st.markdown("**Investigate this case live**")
-                        live_panel.render_investigate(
-                            case_key=str(selected_case.get("policy_id", "case")),
-                            address=format_sales_worklist_rows([selected_case])[0]["Address on file"],
-                            real_mode=not demo_mode,
-                            root=ROOT,
-                            run_dir=profile.run_dir,
-                            saved_fallback=lambda: st.caption("The saved result for this case is in the case card above."),
-                        )
-                with st.expander("Investigate another address"):
+            if decisions_lib.is_confirmed_fix(selected_case):
+                _render_decision_box(selected_case, decision_log)
+            already_confirmed = (
+                str(selected_case.get("verification_status", "")).strip().casefold() == "verified by precisely"
+            )
+            # Offer a live investigation only where the overnight run left work to do.
+            if live_enabled and selected_case.get("next_action") == "analyst_review" and not already_confirmed:
+                case_display = format_sales_worklist_rows([selected_case])[0]
+
+                def record_live_decision(decision: str, result: dict[str, Any], case=selected_case, shown=case_display) -> None:
+                    if decision != "approved" or not result.get("proposed_fix") or result.get("fix_confirmed") is not True:
+                        return
+                    entry = decisions_lib.decision_entry(
+                        policy_id=shown["Policy ID"],
+                        decision="approved",
+                        address_on_file=shown["Address on file"],
+                        corrected=decisions_lib.corrected_address(result["proposed_fix"], case.get("input_address")),
+                        confirmed_by_precisely=True,
+                        source="Live investigation",
+                    )
+                    _record_worklist_decision(entry, decision_log)
+                    st.session_state["just_decided"] = entry
+                    st.rerun()
+
+                with st.container(border=True):
+                    st.markdown("**Investigate this case live**")
                     live_panel.render_investigate(
-                        case_key="typed_address",
-                        address="",
+                        case_key=str(selected_case.get("policy_id", "case")),
+                        address=case_display["Address on file"],
                         real_mode=not demo_mode,
                         root=ROOT,
                         run_dir=profile.run_dir,
-                        allow_typed=True,
+                        saved_fallback=lambda: st.caption("The saved result for this case is in the case card above."),
+                        on_decision=record_live_decision,
                     )
+        _render_corrections(latest_decisions, demo_mode, profile.run_dir)
+        if live_enabled:
+            with st.expander("Quick address check"):
+                st.caption(
+                    "Check one address on the spot, for example during a call or a new quote. "
+                    "Nothing is saved to the work list."
+                )
+                live_panel.render_investigate(
+                    case_key="typed_address",
+                    address="",
+                    real_mode=not demo_mode,
+                    root=ROOT,
+                    run_dir=profile.run_dir,
+                    allow_typed=True,
+                    record_decisions=False,
+                )
 
 app_ui.render_footer()
