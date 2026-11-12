@@ -181,6 +181,27 @@ def corrections_rows(latest: Mapping[str, Mapping[str, Any]]) -> list[dict[str, 
     return rows
 
 
+AUDIT_LABELS = {"approved": "Approved", "rejected": "Rejected, sent to research", "undone": "Undone"}
+
+
+def audit_rows(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, str]]:
+    """Every decision in the log, newest first, in plain words. Nothing is removed."""
+    rows = [
+        {
+            "Time (UTC)": _text(entry.get("time")).replace("T", " ").replace("+00:00", ""),
+            "Policy ID": _text(entry.get("policy_id")),
+            "Decision": AUDIT_LABELS.get(_text(entry.get("decision")), _text(entry.get("decision"))),
+            "Decided by": _text(entry.get("decided_by")),
+            "Address on file": _text(entry.get("address_on_file")),
+            "Corrected address": _text(entry.get("corrected_address")),
+            "Confirmed by Precisely": "Yes" if entry.get("confirmed_by_precisely") else "No",
+            "Source": _text(entry.get("source")),
+        }
+        for entry in entries
+    ]
+    return list(reversed(rows))
+
+
 def corrections_workbook(rows: list[Mapping[str, str]]) -> bytes:
     workbook = Workbook()
     sheet = workbook.active

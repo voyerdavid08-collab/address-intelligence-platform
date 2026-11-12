@@ -132,3 +132,24 @@ def test_warmup_resets_the_work_list(tmp_path, monkeypatch, capsys):
     warmup.main([])
     assert not log.exists()
     assert "Work list reset: 1 decision log(s) moved aside" in capsys.readouterr().out
+
+
+def test_audit_rows_keep_every_decision_newest_first():
+    entries = [
+        wd.decision_entry(policy_id="POL-1", decision="approved", address_on_file="1141 Napoheon Ave, Apt 3",
+                          corrected=wd.corrected_address(CONFIRMED_ROW["suggestion"], ON_FILE),
+                          confirmed_by_precisely=True, now=NOW),
+        wd.decision_entry(policy_id="POL-1", decision="undone", address_on_file="1141 Napoheon Ave, Apt 3", now=NOW),
+    ]
+    rows = wd.audit_rows(entries)
+    assert [row["Decision"] for row in rows] == ["Undone", "Approved"]
+    assert rows[1] == {
+        "Time (UTC)": "2026-11-18 14:05:00",
+        "Policy ID": "POL-1",
+        "Decision": "Approved",
+        "Decided by": "Analyst",
+        "Address on file": "1141 Napoheon Ave, Apt 3",
+        "Corrected address": "1141 Napoleon Ave, Apt 3, New Orleans, LA 70115",
+        "Confirmed by Precisely": "Yes",
+        "Source": "Overnight run",
+    }

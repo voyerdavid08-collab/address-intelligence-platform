@@ -417,6 +417,20 @@ def _render_corrections(latest: dict[str, dict[str, Any]], demo_mode: bool, run_
         st.success(f"Corrections file saved to: {Path(saved_path).resolve()}")
 
 
+def _render_audit_trail(entries: list[dict[str, Any]], demo_mode: bool) -> None:
+    rows = decisions_lib.audit_rows(entries)
+    with st.expander(f"Audit trail ({len(rows)} {'decision' if len(rows) == 1 else 'decisions'})"):
+        st.caption(
+            "Every analyst decision, newest first: who, when, the address before and after, and Precisely's confirmation. "
+            "Entries are added, never edited or removed. "
+            + ("Made-up mode keeps them for this session only." if demo_mode else "Stored in this client's private results folder.")
+        )
+        if rows:
+            st.dataframe(rows, hide_index=True, width="stretch")
+        else:
+            st.caption("No decisions yet.")
+
+
 def _render_exception_detail(detail: dict[str, Any]) -> None:
     values = format_exception_table_rows([detail])[0]
     display = format_sales_worklist_rows([detail])[0]
@@ -1392,6 +1406,7 @@ with results_tab:
                         on_decision=record_live_decision,
                     )
         _render_corrections(latest_decisions, demo_mode, profile.run_dir)
+        _render_audit_trail(list(decision_entries), demo_mode)
         if live_enabled:
             with st.expander("Quick address check"):
                 st.caption(

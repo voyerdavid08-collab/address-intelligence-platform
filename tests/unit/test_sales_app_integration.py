@@ -409,6 +409,9 @@ def test_approving_a_confirmed_fix_logs_it_and_builds_the_corrections_file(sales
     table = next(frame for frame in app.dataframe if frame.key and frame.key.startswith("exceptions_table_"))
     assert "001" in list(table.value["Policy ID"])
     assert [json.loads(line)["decision"] for line in log.read_text(encoding="utf-8").splitlines()] == ["approved", "undone"]
+    assert any(item.label == "Audit trail (2 decisions)" for item in app.expander)
+    audit = frame_with(app, "Decided by")
+    assert list(audit["Decision"]) == ["Undone", "Approved"]
 
 
 def test_made_up_mode_keeps_decisions_in_the_session_only(sales_app, monkeypatch):
