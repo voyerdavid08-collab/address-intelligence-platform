@@ -153,3 +153,13 @@ def test_audit_rows_keep_every_decision_newest_first():
         "Confirmed by Precisely": "Yes",
         "Source": "Overnight run",
     }
+
+
+def test_case_card_suggestion_shows_the_unit_kept():
+    from address_intelligence.app_data import format_sales_worklist_rows
+
+    row = {**CONFIRMED_ROW, "input_address": ON_FILE}
+    shown = format_sales_worklist_rows([row])[0]
+    assert shown["Suggested address"] == "1141 Napoleon Ave, Apt 3, New Orleans 70115"
+    no_unit = format_sales_worklist_rows([{**CONFIRMED_ROW, "input_address": {**ON_FILE, "address_line2": ""}}])[0]
+    assert no_unit["Suggested address"] == "1141 Napoleon Ave, New Orleans 70115"

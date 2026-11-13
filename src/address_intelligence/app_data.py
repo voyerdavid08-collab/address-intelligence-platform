@@ -594,7 +594,12 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
             str(suggestion.get(key) or "").strip()
             for key in ("city", "zip5") if str(suggestion.get(key) or "").strip()
         )
-        suggested_address = ", ".join(part for part in (line, city_zip) if part)
+        # The AI corrects the street, town or ZIP. It never removes a unit the customer gave,
+        # so the unit on file is shown with the suggestion, exactly as it would be approved.
+        unit = str(on_file.get("address_line2") or "").strip()
+        if not line or not unit or unit.casefold() in line.casefold():
+            unit = ""
+        suggested_address = ", ".join(part for part in (line, unit, city_zip) if part)
         action = str(row.get("next_action") or "").strip().casefold()
         verification = str(row.get("verification_status") or "").strip().casefold()
         status = values["Verification status"] if verification else ""
