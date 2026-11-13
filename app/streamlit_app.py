@@ -320,10 +320,17 @@ def _render_decision_box(case: dict[str, Any], log_path: Path | None) -> None:
     """Approve or reject a fix that Precisely confirmed, with the unit kept from the file."""
     display = format_sales_worklist_rows([case])[0]
     policy_id = display["Policy ID"]
-    parts = decisions_lib.corrected_address(case.get("suggestion") or {}, case.get("input_address"))
+    confirmed = case.get("precisely_address")
+    parts = decisions_lib.corrected_address(confirmed or case.get("suggestion") or {}, case.get("input_address"))
     with st.container(border=True):
         st.markdown("**Analyst decision**")
         st.markdown(f"Address to approve: **{escape(decisions_lib.format_address(parts))}**", unsafe_allow_html=True)
+        if confirmed:
+            changes = decisions_lib.corrections_by_precisely(case.get("suggestion") or {}, confirmed)
+            if changes:
+                st.caption("Precisely corrected the AI's suggestion (" + "; ".join(changes) + "). This is Precisely's address.")
+            else:
+                st.caption("This is the address Precisely confirmed.")
         if decisions_lib.unit_kept(parts):
             st.caption(f"Unit kept from the address on file ({parts['line2']}).")
         st.caption(
@@ -1246,6 +1253,14 @@ with results_tab:
             decision_log = decisions_lib.decision_log_path(profile.run_dir)
             decision_entries = decisions_lib.read_log(decision_log)
         latest_decisions = decisions_lib.latest_decisions(decision_entries)
+        if not demo_mode:
+            confirmed_addresses = decisions_lib.load_precisely_confirmed(profile.run_dir)
+            queue = [
+                {**row, "precisely_address": confirmed_addresses[str(row.get("policy_id"))]}
+                if decisions_lib.is_confirmed_fix(row) and str(row.get("policy_id")) in confirmed_addresses
+                else row
+                for row in queue
+            ]
         queue = decisions_lib.open_cases(queue, latest_decisions)
         has_input_address = not demo_mode or any(
             row["Address on file"] for row in format_sales_worklist_rows(queue)

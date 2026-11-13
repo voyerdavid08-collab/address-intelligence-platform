@@ -193,7 +193,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     panels = next(item.value for item in app.markdown if 'class="ai-case-panels"' in item.value)
     assert "Suggested address" in panels and "What the AI found" in panels and "Summary for operations" in panels
     assert "Possible street name issue needs review." in panels
-    assert "The address was located only to the ZIP or city. Flood data is on hold until the address is approved." in panels
+    assert "The address could not be confirmed at the building level. Flood data is on hold until the address is corrected." in panels
     assert "repeat(2,minmax(0,1fr))" in panels and panels.count('class="ai-case-panel"') == 3
     assert panels.count("grid-column:1 / -1;") == 1
     assert panels.index("grid-column:1 / -1;") > panels.index("What the AI found")

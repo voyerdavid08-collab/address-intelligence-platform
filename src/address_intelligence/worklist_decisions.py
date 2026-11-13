@@ -93,6 +93,65 @@ def unit_kept(parts: Mapping[str, Any]) -> bool:
     return bool(_text(parts.get("line2")))
 
 
+_SHORT_UPPER = {"N", "S", "E", "W", "NE", "NW", "SE", "SW", "PO"}
+
+
+def tidy_case(text: str) -> str:
+    """Precisely answers in capitals. Show them the way the file writes addresses."""
+    words = []
+    for word in _text(text).split():
+        if word.upper() in _SHORT_UPPER:
+            words.append(word.upper())
+        elif word[:1].isdigit():
+            words.append(word.lower())
+        else:
+            words.append(word[:1].upper() + word[1:].lower())
+    return " ".join(words)
+
+
+def load_precisely_confirmed(run_dir: str | Path) -> dict[str, dict[str, str]]:
+    """Precisely's own answer when it re-checked each AI fix in the overnight run.
+
+    Read from the run's saved answers, so no call is made. Keyed by policy ID. The app
+    shows and approves this address, never the AI's raw suggestion.
+    """
+    from address_intelligence.live_ai import summarize_address_result
+
+    folder = Path(run_dir) / "cache" / "remediation_geocode_premium"
+    confirmed: dict[str, dict[str, str]] = {}
+    if not folder.is_dir():
+        return confirmed
+    for path in sorted(folder.glob("*.json")):
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        payload = saved.get("data") if isinstance(saved, Mapping) and "data" in saved else saved
+        summary = summarize_address_result(payload)
+        line1 = _text(summary.get("street_line"))
+        if not summary.get("found") or not line1:
+            continue
+        confirmed[path.stem] = {
+            "line1": tidy_case(line1),
+            "city": tidy_case(_text(summary.get("city"))),
+            "state": _text(summary.get("state")).upper(),
+            "zip5": _text(summary.get("zip5"))[:5],
+        }
+    return confirmed
+
+
+def corrections_by_precisely(suggestion: Mapping[str, Any], confirmed: Mapping[str, Any]) -> list[str]:
+    """Plain-language list of what Precisely changed in the AI's suggestion."""
+    changes = []
+    for key, label in (("line1", "street"), ("city", "city"), ("zip5", "ZIP")):
+        before, after = _text(suggestion.get(key)), _text(confirmed.get(key))
+        if key == "line1" and after.casefold().startswith(before.casefold()):
+            continue  # Precisely only added the unit it was given
+        if before and after and before.casefold() != after.casefold():
+            changes.append(f"{label}: {before} → {after}")
+    return changes
+
+
 def decision_entry(
     *,
     policy_id: str,

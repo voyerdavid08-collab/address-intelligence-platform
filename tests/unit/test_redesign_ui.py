@@ -203,10 +203,10 @@ def test_work_path_and_kpis_escape_inputs(monkeypatch):
         ("No issues found", "No problem visible in the file. The full run can find issues a file check cannot see."),
         ("Right address", "Share of records that point to the correct building, measured against the reference answers."),
         ("Flawed records fully corrected", "Records that started with a known error and now match the reference answer in full, including the unit."),
-        ("City-level location changes flood-risk tier", "Properties with an exact location that land in a different flood tier when placed at city level. Under-priced means the tier was too low. Over-priced means it was too high."),
-        ("AI fixes verified", "AI suggestions that Precisely checked and confirmed."),
+        ("City-level location changes flood-risk tier", "Properties with an exact location that land in a different flood tier when placed at city level. Under-rated means the tier was too low. Over-rated means it was too high."),
+        ("AI fixes verified", "Of the AI fixes Precisely confirmed, how many match the reference answer. Fixes Precisely could not confirm are stopped and never count here."),
         ("Match level", "How closely the address was placed: building, street, or ZIP and city."),
-        ("AI cause", "What the AI found as the likely cause of the problem."),
+        ("AI cause", "The possible causes the AI kept. It lists more than one when it is not sure."),
         ("Confidence", "How often the AI reached the same cause across repeat checks. It does not measure whether the address is right."),
     ],
 )

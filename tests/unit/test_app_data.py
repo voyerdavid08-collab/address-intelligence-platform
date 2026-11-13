@@ -444,7 +444,7 @@ def test_workbook_matches_work_list_rows_and_plain_case_details(tmp_path, demo):
         f"{prefix}-2", "12 EXAMPLE ROAD, Example, TX, 00001", "Customer outreach",
         "Matched to the street, not the building", "With the customer",
         "12 EXAMPLE RD, Example 00001", "street name issue",
-        "was located only to the ZIP or city. Flood data is on hold until the address is approved.",
+        "could not be confirmed at the building level. Flood data is on hold until the address is corrected.",
         "Street (S4)", "Street name", "91%",
     ]
     assert sheet["E3"].value == "No AI suggestion"

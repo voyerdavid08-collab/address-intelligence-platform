@@ -589,6 +589,10 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
         suggestion = row.get("suggestion") or {}
         if not isinstance(suggestion, Mapping):
             suggestion = {}
+        # Once Precisely has confirmed a fix, show Precisely's address, not the AI's draft.
+        confirmed = row.get("precisely_address")
+        if isinstance(confirmed, Mapping) and confirmed.get("line1"):
+            suggestion = confirmed
         line = str(suggestion.get("line1") or "").strip()
         city_zip = " ".join(
             str(suggestion.get(key) or "").strip()
@@ -601,7 +605,7 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
             unit = ""
         suggested_address = ", ".join(part for part in (line, unit, city_zip) if part)
         action = str(row.get("next_action") or "").strip().casefold()
-        verification = str(row.get("verification_status") or "").strip().casefold()
+        verification = str(row.get("verification_status") or "").strip().casefold().replace("_", " ")
         status = values["Verification status"] if verification else ""
         if action == "customer_outreach":
             status = "With the customer"
@@ -610,10 +614,10 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
         reason = row.get("rationale") or plain_flag_reason(row.get("manual_review_reason") or "")
         summary = str(row.get("narrative") or "")
         summary = (summary
-            .replace("could not be verified to building level", "was located only to the ZIP or city")
-            .replace("The location was located only", "The address was located only")
-            .replace("Flood enrichment was withheld pending address remediation.", "Flood data is on hold until the address is approved.")
-            .replace("Flood enrichment was withheld pending address remediation", "Flood data is on hold until the address is approved."))
+            .replace("could not be verified to building level", "could not be confirmed at the building level")
+            .replace("The location could not be confirmed", "The address could not be confirmed")
+            .replace("Flood enrichment was withheld pending address remediation.", "Flood data is on hold until the address is corrected.")
+            .replace("Flood enrichment was withheld pending address remediation", "Flood data is on hold until the address is corrected."))
         result.append({
             "Policy ID": str(row.get("policy_id") or ""),
             "Address on file": address,

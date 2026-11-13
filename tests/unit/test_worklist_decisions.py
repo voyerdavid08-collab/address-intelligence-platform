@@ -163,3 +163,30 @@ def test_case_card_suggestion_shows_the_unit_kept():
     assert shown["Suggested address"] == "1141 Napoleon Ave, Apt 3, New Orleans 70115"
     no_unit = format_sales_worklist_rows([{**CONFIRMED_ROW, "input_address": {**ON_FILE, "address_line2": ""}}])[0]
     assert no_unit["Suggested address"] == "1141 Napoleon Ave, New Orleans 70115"
+
+
+def test_precisely_answer_replaces_the_ai_draft(tmp_path):
+    from address_intelligence.app_data import format_sales_worklist_rows
+
+    folder = tmp_path / "cache" / "remediation_geocode_premium"
+    folder.mkdir(parents=True)
+    (folder / "POL-15.json").write_text(json.dumps({"data": {"candidates": [{"address": {
+        "mainAddressLine": "1045 N SHEPHERD DR", "areaName3": "HOUSTON", "areaName1": "TX", "postCode1": "77008",
+    }}]}, "status_code": 200}), encoding="utf-8")
+    (folder / "broken.json").write_text("{not json", encoding="utf-8")
+    confirmed = wd.load_precisely_confirmed(tmp_path)
+    assert confirmed == {"POL-15": {"line1": "1045 N Shepherd Dr", "city": "Houston", "state": "TX", "zip5": "77008"}}
+    ai = {"line1": "1045 N Shepherd Dr", "city": "Houston", "zip5": "77002"}
+    assert wd.corrections_by_precisely(ai, confirmed["POL-15"]) == ["ZIP: 77002 → 77008"]
+    assert wd.corrections_by_precisely({"line1": "1141 Napoleon Ave"}, {"line1": "1141 Napoleon Ave Apt 3"}) == []
+    row = {**CONFIRMED_ROW, "policy_id": "POL-15", "suggestion": ai,
+           "input_address": {"address_line1": "1045 N Shepherd Dr", "city": "Houstox", "state": "TX"},
+           "precisely_address": confirmed["POL-15"]}
+    assert format_sales_worklist_rows([row])[0]["Suggested address"] == "1045 N Shepherd Dr, Houston 77008"
+    assert wd.format_address(wd.corrected_address(confirmed["POL-15"], row["input_address"])) == "1045 N Shepherd Dr, Houston, TX 77008"
+    assert wd.load_precisely_confirmed(tmp_path / "missing") == {}
+
+
+def test_tidy_case_keeps_directions_and_ordinals_readable():
+    assert wd.tidy_case("1045 N SHEPHERD DR") == "1045 N Shepherd Dr"
+    assert wd.tidy_case("200 W 1ST ST") == "200 W 1st St"
