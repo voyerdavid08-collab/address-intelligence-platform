@@ -563,6 +563,7 @@ STATUS_HELP = (
     "**Confirmed by Precisely:** a fix is ready for the analyst to approve.\n\n"
     "**Not confirmed by Precisely:** the AI proposed a fix, but Precisely could not confirm it, so it was stopped.\n\n"
     "**No fix found:** there is no safe fix, so the case goes to research.\n\n"
+    "**Rejected by analyst:** the analyst turned down a confirmed fix, so the case goes to research.\n\n"
     "**With the customer:** only the customer can give the missing information."
 )
 _PLAIN_CONFIRMED = {"verified by precisely", "verified correct", "confirmed", "confirmed correct"}
@@ -576,6 +577,9 @@ def plain_status(row: Mapping[str, Any]) -> str:
         return "With the customer"
     if action != "analyst_review":
         return ""
+    decision = row.get("analyst_decision")
+    if isinstance(decision, Mapping) and decision.get("decision") == "rejected":
+        return "Rejected by analyst"
     status = str(row.get("verification_status") or "").strip().casefold().replace("_", " ")
     verification = row.get("verification")
     verification = verification if isinstance(verification, Mapping) else {}

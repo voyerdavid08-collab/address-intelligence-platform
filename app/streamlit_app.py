@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from datetime import datetime, timezone
 from typing import Any
 
 import streamlit as st
@@ -352,10 +353,27 @@ def _render_decision_box(case: dict[str, Any], log_path: Path | None) -> None:
                 address_on_file=display["Address on file"],
                 corrected=parts,
                 confirmed_by_precisely=True,
-                source="Overnight run",
+                fix_from="Batch run",
+                confirmed_at=(confirmed or {}).get("confirmed_at", ""),
+                ai_model=str(case.get("ai_model") or ""),
             )
             _record_worklist_decision(entry, log_path)
             st.session_state["just_decided"] = entry
+            st.rerun()
+
+
+def _render_rejected_note(entry: dict[str, Any], log_path: Path | None) -> None:
+    when = entry["time"].replace("T", " ").replace("+00:00", "")
+    with st.container(border=True):
+        st.markdown("**Analyst decision**")
+        st.info(f"Rejected by analyst on {when} UTC. Sent to research.")
+        if st.button("Undo", key=f"wl_undo_rejected_{entry['policy_id']}", icon=":material/undo:"):
+            _record_worklist_decision(
+                decisions_lib.decision_entry(
+                    policy_id=entry["policy_id"], decision="undone", address_on_file=entry["address_on_file"]
+                ),
+                log_path,
+            )
             st.rerun()
 
 
@@ -366,7 +384,7 @@ def _render_decision_confirmation(entry: dict[str, Any], log_path: Path | None) 
             st.success(f"{policy_id} approved. It has left the open work list.")
             st.markdown(f"**Corrected address:** {escape(entry['corrected_address'])}", unsafe_allow_html=True)
         else:
-            st.info(f"{policy_id}: fix rejected and sent to research. It stays on the work list.")
+            st.info(f"{policy_id}: rejected by analyst and sent to research. It stays on the work list, marked Rejected by analyst.")
         when = entry["time"].replace("T", " ").replace("+00:00", "")
         st.caption(
             f"Logged for audit at {when} UTC: who decided, the address before and after, "
@@ -454,7 +472,7 @@ def _render_exception_detail(detail: dict[str, Any]) -> None:
     verification = worklist_verification_text(detail) if verification_available else ""
     status = worklist_case_status(detail, display["Status"])
     status_key = status.casefold()
-    if status_key in {"confirmed incorrect", "rejected", "not verified", "not confirmed by precisely", "with the customer"}:
+    if status_key in {"confirmed incorrect", "rejected", "not verified", "not confirmed by precisely", "rejected by analyst", "with the customer"}:
         color, background = "#B00062", "#FDE8F3"
     elif status_key == "confirmed by precisely":
         color, background = "#39006B", "#F5EFFC"
@@ -1263,12 +1281,20 @@ with results_tab:
                 else row
                 for row in queue
             ]
+            batch_models = decisions_lib.load_batch_models(profile.run_dir)
+            queue = [{**row, "ai_model": batch_models.get(str(row.get("policy_id")), "")} for row in queue]
         queue = decisions_lib.open_cases(queue, latest_decisions)
+        queue = [
+            {**row, "analyst_decision": latest_decisions[str(row.get("policy_id"))]}
+            if str(row.get("policy_id")) in latest_decisions
+            else row
+            for row in queue
+        ]
         has_input_address = not demo_mode or any(
             row["Address on file"] for row in format_sales_worklist_rows(queue)
         )
         action_values = sorted({str(row.get("next_action", "")) for row in queue})
-        status_order = ["Confirmed by Precisely", "Not confirmed by Precisely", "No fix found", "With the customer", "Not started"]
+        status_order = ["Confirmed by Precisely", "Rejected by analyst", "Not confirmed by Precisely", "No fix found", "With the customer", "Not started"]
         present_statuses = {plain_status(row) for row in queue} - {""}
         verification_values = [status for status in status_order if status in present_statuses] + sorted(present_statuses - set(status_order))
         action_column, verification_column = st.columns(2)
@@ -1387,7 +1413,9 @@ with results_tab:
         elif filtered:
             selected_case = filtered[index]
             _render_exception_detail(selected_case)
-            if decisions_lib.is_confirmed_fix(selected_case):
+            if (selected_case.get("analyst_decision") or {}).get("decision") == "rejected":
+                _render_rejected_note(selected_case["analyst_decision"], decision_log)
+            elif decisions_lib.is_confirmed_fix(selected_case):
                 _render_decision_box(selected_case, decision_log)
             already_confirmed = (
                 str(selected_case.get("verification_status", "")).strip().casefold() == "verified by precisely"
@@ -1405,7 +1433,9 @@ with results_tab:
                         address_on_file=shown["Address on file"],
                         corrected=decisions_lib.corrected_address(result["proposed_fix"], case.get("input_address")),
                         confirmed_by_precisely=True,
-                        source="Live investigation",
+                        fix_from="Live check",
+                        confirmed_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                        ai_model=str(result.get("model") or ""),
                     )
                     _record_worklist_decision(entry, decision_log)
                     st.session_state["just_decided"] = entry

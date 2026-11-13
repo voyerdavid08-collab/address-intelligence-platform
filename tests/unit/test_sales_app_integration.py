@@ -428,3 +428,21 @@ def test_made_up_mode_keeps_decisions_in_the_session_only(sales_app, monkeypatch
     approve[0].click().run(timeout=30)
     assert not app.exception
     assert any(item.label == "Download corrections file (Excel)" for item in app.get("download_button"))
+
+
+def test_rejecting_marks_the_case_and_keeps_it_on_the_list(sales_app, monkeypatch, tmp_path):
+    from address_intelligence import worklist_decisions
+
+    log = tmp_path / "decisions" / "worklist_decisions.jsonl"
+    monkeypatch.setattr(worklist_decisions, "decision_log_path", lambda run_dir: log)
+    app = sales_app.app
+    next(w for w in app.radio if w.label == "Show:").set_value("Real results on this computer").run(timeout=30)
+    next(b for b in app.button if b.label == "Reject: send to research").click().run(timeout=30)
+    assert not app.exception
+    table = next(frame for frame in app.dataframe if frame.key and frame.key.startswith("exceptions_table_"))
+    statuses = dict(zip(table.value["Policy ID"], table.value["Status"]))
+    assert statuses["001"] == "Rejected by analyst"
+    audit = frame_with(app, "Decided by")
+    assert list(audit["Decision"]) == ["Rejected by analyst, sent to research"]
+    assert list(audit["Fix from"]) == ["Batch run"]
+    assert "Rejected by analyst" in [o for o in next(s for s in app.selectbox if s.label == "Filter by status").options]

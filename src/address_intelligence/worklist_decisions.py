@@ -25,10 +25,11 @@ CORRECTIONS_COLUMNS = (
     "Policy ID",
     "Address on file",
     "Corrected address",
-    "Confirmed by Precisely",
+    "Fix from",
+    "Confirmed by Precisely at (UTC)",
     "Approved (UTC)",
-    "Source",
 )
+_OLD_SOURCES = {"Overnight run": "Batch run", "Live investigation": "Live check"}
 _CONFIRMED = {"verified by precisely", "verified correct", "confirmed", "confirmed correct"}
 _REJECTED = {"rejected", "verified incorrect", "did not verify", "not verified"}
 
@@ -136,8 +137,31 @@ def load_precisely_confirmed(run_dir: str | Path) -> dict[str, dict[str, str]]:
             "city": tidy_case(_text(summary.get("city"))),
             "state": _text(summary.get("state")).upper(),
             "zip5": _text(summary.get("zip5"))[:5],
+            # When Precisely gave this answer: the time its saved answer was written.
+            "confirmed_at": _utc_text(datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)),
         }
     return confirmed
+
+
+def load_batch_models(run_dir: str | Path) -> dict[str, str]:
+    """The AI model that proposed each batch fix, for the audit trail."""
+    path = Path(run_dir) / "remediation_actions.jsonl"
+    models: dict[str, str] = {}
+    if not path.is_file():
+        return models
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        model = _text(row.get("model_reported") or row.get("model"))
+        if row.get("policy_id") and model:
+            models[str(row["policy_id"])] = model
+    return models
+
+
+def _utc_text(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def corrections_by_precisely(suggestion: Mapping[str, Any], confirmed: Mapping[str, Any]) -> list[str]:
@@ -159,7 +183,9 @@ def decision_entry(
     address_on_file: str,
     corrected: Mapping[str, Any] | None = None,
     confirmed_by_precisely: bool = False,
-    source: str = "Overnight run",
+    fix_from: str = "Batch run",
+    confirmed_at: str = "",
+    ai_model: str = "",
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if decision not in DECISIONS:
@@ -177,8 +203,15 @@ def decision_entry(
         "address_on_file": address_on_file,
         "corrected_address": format_address(corrected) if corrected and decision == "approved" else "",
         "confirmed_by_precisely": bool(confirmed_by_precisely),
-        "source": source,
+        "fix_from": fix_from,
+        "confirmed_at": confirmed_at if confirmed_by_precisely else "",
+        "ai_model": ai_model,
     }
+
+
+def _fix_from(entry: Mapping[str, Any]) -> str:
+    value = _text(entry.get("fix_from") or entry.get("source"))
+    return _OLD_SOURCES.get(value, value)
 
 
 def read_log(path: str | Path) -> list[dict[str, Any]]:
@@ -233,14 +266,14 @@ def corrections_rows(latest: Mapping[str, Mapping[str, Any]]) -> list[dict[str, 
             "Policy ID": policy_id,
             "Address on file": _text(entry.get("address_on_file")),
             "Corrected address": _text(entry.get("corrected_address")),
-            "Confirmed by Precisely": "Yes" if entry.get("confirmed_by_precisely") else "No",
+            "Fix from": _fix_from(entry),
+            "Confirmed by Precisely at (UTC)": _text(entry.get("confirmed_at")),
             "Approved (UTC)": _text(entry.get("time")).replace("T", " ").replace("+00:00", ""),
-            "Source": _text(entry.get("source")),
         })
     return rows
 
 
-AUDIT_LABELS = {"approved": "Approved", "rejected": "Rejected, sent to research", "undone": "Undone"}
+AUDIT_LABELS = {"approved": "Approved", "rejected": "Rejected by analyst, sent to research", "undone": "Undone"}
 
 
 def audit_rows(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, str]]:
@@ -253,8 +286,9 @@ def audit_rows(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, str]]:
             "Decided by": _text(entry.get("decided_by")),
             "Address on file": _text(entry.get("address_on_file")),
             "Corrected address": _text(entry.get("corrected_address")),
-            "Confirmed by Precisely": "Yes" if entry.get("confirmed_by_precisely") else "No",
-            "Source": _text(entry.get("source")),
+            "Fix from": _fix_from(entry),
+            "Confirmed by Precisely at (UTC)": _text(entry.get("confirmed_at")),
+            "AI model": _text(entry.get("ai_model")),
         }
         for entry in entries
     ]

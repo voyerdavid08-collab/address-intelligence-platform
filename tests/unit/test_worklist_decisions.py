@@ -66,7 +66,9 @@ def test_approval_leaves_the_list_and_undo_brings_it_back(tmp_path):
         "address_on_file": "1141 Napoheon Ave, Apt 3",
         "corrected_address": "1141 Napoleon Ave, Apt 3, New Orleans, LA 70115",
         "confirmed_by_precisely": True,
-        "source": "Overnight run",
+        "fix_from": "Batch run",
+        "confirmed_at": "",
+        "ai_model": "",
     }
     wd.append_log(log, wd.decision_entry(policy_id="POL-1", decision="undone", address_on_file="1141 Napoheon Ave, Apt 3"))
     latest = wd.latest_decisions(wd.read_log(log))
@@ -92,9 +94,9 @@ def test_corrections_file_lists_approved_changes_only(tmp_path):
         "Policy ID": "POL-1",
         "Address on file": "1141 Napoheon Ave, Apt 3",
         "Corrected address": "1141 Napoleon Ave, Apt 3, New Orleans, LA 70115",
-        "Confirmed by Precisely": "Yes",
+        "Fix from": "Batch run",
+        "Confirmed by Precisely at (UTC)": "",
         "Approved (UTC)": "2026-11-18 14:05:00",
-        "Source": "Overnight run",
     }]
     sheet = load_workbook(BytesIO(wd.corrections_workbook(rows))).active
     assert sheet.title == "Approved changes"
@@ -150,8 +152,9 @@ def test_audit_rows_keep_every_decision_newest_first():
         "Decided by": "Analyst",
         "Address on file": "1141 Napoheon Ave, Apt 3",
         "Corrected address": "1141 Napoleon Ave, Apt 3, New Orleans, LA 70115",
-        "Confirmed by Precisely": "Yes",
-        "Source": "Overnight run",
+        "Fix from": "Batch run",
+        "Confirmed by Precisely at (UTC)": "",
+        "AI model": "",
     }
 
 
@@ -175,7 +178,8 @@ def test_precisely_answer_replaces_the_ai_draft(tmp_path):
     }}]}, "status_code": 200}), encoding="utf-8")
     (folder / "broken.json").write_text("{not json", encoding="utf-8")
     confirmed = wd.load_precisely_confirmed(tmp_path)
-    assert confirmed == {"POL-15": {"line1": "1045 N Shepherd Dr", "city": "Houston", "state": "TX", "zip5": "77008"}}
+    assert {k: v for k, v in confirmed["POL-15"].items() if k != "confirmed_at"} == {"line1": "1045 N Shepherd Dr", "city": "Houston", "state": "TX", "zip5": "77008"}
+    assert len(confirmed["POL-15"]["confirmed_at"]) == 19 and list(confirmed) == ["POL-15"]
     ai = {"line1": "1045 N Shepherd Dr", "city": "Houston", "zip5": "77002"}
     assert wd.corrections_by_precisely(ai, confirmed["POL-15"]) == ["ZIP: 77002 → 77008"]
     assert wd.corrections_by_precisely({"line1": "1141 Napoleon Ave"}, {"line1": "1141 Napoleon Ave Apt 3"}) == []
@@ -190,3 +194,25 @@ def test_precisely_answer_replaces_the_ai_draft(tmp_path):
 def test_tidy_case_keeps_directions_and_ordinals_readable():
     assert wd.tidy_case("1045 N SHEPHERD DR") == "1045 N Shepherd Dr"
     assert wd.tidy_case("200 W 1ST ST") == "200 W 1st St"
+
+
+def test_audit_keeps_origin_confirmation_time_and_model(tmp_path):
+    entry = wd.decision_entry(policy_id="POL-1", decision="approved", address_on_file="x",
+                              corrected={"line1": "1 Main St"}, confirmed_by_precisely=True,
+                              fix_from="Batch run", confirmed_at="2026-10-30 06:29:01", ai_model="openai/gpt-oss-20b", now=NOW)
+    row = wd.audit_rows([entry])[0]
+    assert (row["Fix from"], row["Confirmed by Precisely at (UTC)"], row["AI model"]) == ("Batch run", "2026-10-30 06:29:01", "openai/gpt-oss-20b")
+    old = {**entry, "source": "Live investigation"}
+    old.pop("fix_from")
+    assert wd.audit_rows([old])[0]["Fix from"] == "Live check"
+    (tmp_path / "remediation_actions.jsonl").write_text(
+        '{"policy_id": "POL-1", "model_reported": "openai/gpt-oss-20b"}' + "\n" + "not json" + "\n", encoding="utf-8")
+    assert wd.load_batch_models(tmp_path) == {"POL-1": "openai/gpt-oss-20b"}
+
+
+def test_rejected_case_shows_its_own_status():
+    from address_intelligence.app_data import plain_status
+
+    rejected = wd.decision_entry(policy_id="POL-1", decision="rejected", address_on_file="x", now=NOW)
+    assert plain_status({**CONFIRMED_ROW, "analyst_decision": rejected}) == "Rejected by analyst"
+    assert plain_status(CONFIRMED_ROW) == "Confirmed by Precisely"
