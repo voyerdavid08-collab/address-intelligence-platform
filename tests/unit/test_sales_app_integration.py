@@ -239,7 +239,7 @@ def test_real_worklist_counts_order_mapped_addresses_and_workflow(sales_app):
         for item in app.caption
     )
     assert all(text in markup(app) for text in (
-        "Automated checks", "AI finds the cause; 1 go to the customer",
+        "Precisely Geocoding", "AI finds the cause; 1 go to the customer",
         "Precisely checks; 1 fixes ready to approve", "Need research. Analysts approve every change",
     ))
     assert "1 First St" in visible_markup(app)

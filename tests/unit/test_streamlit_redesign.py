@@ -74,7 +74,7 @@ def test_result_views_use_selected_client_data_and_keep_mode_protection(monkeypa
     show.set_value("Real results on this computer").run(timeout=30)
     assert not app.exception
     html = "\n".join(element.value for element in app.markdown)
-    assert "Automated checks" in html and "AI finds the cause" in html
+    assert "Precisely Geocoding" in html and "AI finds the cause" in html
     assert "Precisely checks" in html and "Need research. Analysts approve every change" in html
     assert any("Live Precisely results. Private screen share only." in item.value for item in app.warning)
     assert any(

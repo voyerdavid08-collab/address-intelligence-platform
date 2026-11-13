@@ -313,7 +313,7 @@ def test_html_blocks_have_section_spacing_without_double_grid_gap(monkeypatch):
 def test_work_path_uses_data_helper_counts(monkeypatch):
     calls = _capture(monkeypatch)
     ui.render_work_path({"total": 100, "queue": 20, "analyst": 7, "remaining": 3})
-    assert "<strong>100 → 20</strong>Automated checks" in calls[0]
+    assert "<strong>100 → 20</strong>Precisely Geocoding" in calls[0]
     assert "<strong>20 → 7</strong>AI finds the cause; 13 go to the customer" in calls[0]
     assert "<strong>7 → 3</strong>Precisely checks; 4 fixes ready to approve" in calls[0]
     assert "<strong>3</strong>Need research. Analysts approve every change" in calls[0]

@@ -50,7 +50,7 @@ def test_real_mode_without_results_does_not_claim_work_was_completed(monkeypatch
     ).run(timeout=30)
     assert not app.exception
     html = "\n".join(element.value for element in app.markdown)
-    assert "Automated checks" not in html
+    assert "Precisely Geocoding" not in html
     assert any("Live Precisely results. Private screen share only." in item.value for item in app.warning)
 
 

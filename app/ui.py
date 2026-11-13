@@ -599,7 +599,7 @@ def render_work_path(path: dict[str, Any]) -> None:
     """Render work_path counts or ordered label-to-display-value pairs."""
     if {"total", "queue", "analyst", "remaining"} <= path.keys():
         path = {
-            "Automated checks": f'{path["total"]} → {path["queue"]}',
+            "Precisely Geocoding": f'{path["total"]} → {path["queue"]}',
             f'AI finds the cause; {path["queue"] - path["analyst"]} go to the customer': f'{path["queue"]} → {path["analyst"]}',
             f'Precisely checks; {path["analyst"] - path["remaining"]} fixes ready to approve': f'{path["analyst"]} → {path["remaining"]}',
             "Need research. Analysts approve every change": path["remaining"],
