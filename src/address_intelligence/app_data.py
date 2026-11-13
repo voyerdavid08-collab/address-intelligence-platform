@@ -559,7 +559,42 @@ def worklist_verification_text(row: Mapping[str, Any]) -> str:
     return friendly_label(str(row.get("verification_status", "not_started")))
 
 
+STATUS_HELP = (
+    "**Confirmed by Precisely:** a fix is ready for the analyst to approve.\n\n"
+    "**Not confirmed by Precisely:** the AI proposed a fix, but Precisely could not confirm it, so it was stopped.\n\n"
+    "**No fix found:** there is no safe fix, so the case goes to research.\n\n"
+    "**With the customer:** only the customer can give the missing information."
+)
+_PLAIN_CONFIRMED = {"verified by precisely", "verified correct", "confirmed", "confirmed correct"}
+_PLAIN_STOPPED = {"not verified", "did not verify", "verified incorrect"}
+
+
+def plain_status(row: Mapping[str, Any]) -> str:
+    """One plain status per case, the same in the table, the case card, the filter and the export."""
+    action = str(row.get("next_action") or "").strip().casefold()
+    if action == "customer_outreach":
+        return "With the customer"
+    if action != "analyst_review":
+        return ""
+    status = str(row.get("verification_status") or "").strip().casefold().replace("_", " ")
+    verification = row.get("verification")
+    verification = verification if isinstance(verification, Mapping) else {}
+    blocked = str(row.get("suggestion_status") or "").strip().casefold() == "rejected"
+    if not blocked and verification.get("verified_incorrect") is True:
+        return "Confirmed incorrect"  # only known when reference answers exist
+    if not blocked and (status in _PLAIN_CONFIRMED or verification.get("verified_correct") is True):
+        return "Confirmed by Precisely"
+    if not blocked and (status in _PLAIN_STOPPED or verification.get("not_verified") is True
+                        or verification.get("verified_incorrect") is True):
+        return "Not confirmed by Precisely"
+    if status in {"", "not started"}:
+        return "Not started"
+    return "No fix found"
+
+
 def worklist_case_status(row: Mapping[str, Any], table_status: str) -> str:
+    if plain_status(row):
+        return plain_status(row)
     verification_details = row.get("verification")
     available = bool(row.get("verification_status")) or (
         isinstance(verification_details, Mapping)
@@ -618,6 +653,7 @@ def format_sales_worklist_rows(queue: list[dict[str, Any]]) -> list[dict[str, st
             .replace("The location could not be confirmed", "The address could not be confirmed")
             .replace("Flood enrichment was withheld pending address remediation.", "Flood data is on hold until the address is corrected.")
             .replace("Flood enrichment was withheld pending address remediation", "Flood data is on hold until the address is corrected."))
+        status = plain_status(row) or status
         result.append({
             "Policy ID": str(row.get("policy_id") or ""),
             "Address on file": address,

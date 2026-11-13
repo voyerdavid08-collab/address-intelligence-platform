@@ -222,12 +222,12 @@ def test_real_worklist_counts_order_mapped_addresses_and_workflow(sales_app):
     widths = {label: config[label]["width"] for label in (
         "Policy ID", "Address on file", "Next action", "Why flagged", "Status"
     )}
-    assert widths == {"Policy ID": 100, "Address on file": 260, "Next action": 145, "Why flagged": 250, "Status": 170}
+    assert widths == {"Policy ID": 100, "Address on file": 260, "Next action": 145, "Why flagged": 220, "Status": 200}
     assert sum(widths.values()) + 40 < 1176
     assert list(table.value["Next action"]) == [
         "Analyst review", "Analyst review", "Analyst review", "Customer outreach",
     ]
-    assert table.value["Status"].tolist() == ["Confirmed", "No AI suggestion", "Not started", "With the customer"]
+    assert table.value["Status"].tolist() == ["Confirmed by Precisely", "No fix found", "Not started", "With the customer"]
     assert table.value["Address on file"].tolist() == [
         "1 First St, Alpha City, TX, 75001",
         "2 Second St, Alpha City, TX, 75001",
@@ -248,7 +248,7 @@ def test_real_worklist_counts_order_mapped_addresses_and_workflow(sales_app):
 
     app.session_state[table.key] = {"selection": {"rows": [1], "columns": [], "cells": []}}
     app.run(timeout=30)
-    assert "No AI suggestion</span>" in markup(app)
+    assert "No fix found</span>" in markup(app)
     app.session_state[table.key] = {"selection": {"rows": [2], "columns": [], "cells": []}}
     app.run(timeout=30)
     assert not app.exception

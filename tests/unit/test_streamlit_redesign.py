@@ -218,7 +218,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert "color:#1B1433" in flow
     assert "background:transparent;border:1px solid #8017E1" in flow
     action_filter = next(item for item in app.selectbox if item.label == "Filter by next action")
-    verification_filter = next(item for item in app.selectbox if item.label == "Filter by verification status")
+    verification_filter = next(item for item in app.selectbox if item.label == "Filter by status")
     show = next(item for item in app.radio if item.label == "Show:")
     assert show.proto.label_visibility.value == 2
     action_column = parent_of(app._tree, action_filter)
@@ -278,7 +278,7 @@ def test_work_list_selection_filters_and_detail(monkeypatch, tmp_path):
     assert "repeat(2,minmax(0,1fr))" in panels
     assert "grid-column:1 / -1;" not in panels
 
-    next(item for item in app.selectbox if item.label == "Filter by verification status").set_value("not_started")
+    next(item for item in app.selectbox if item.label == "Filter by status").set_value("Not started")
     app.run(timeout=30)
     assert not app.exception
     assert any(item.value == "No work items match these filters." for item in app.info)

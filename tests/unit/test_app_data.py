@@ -447,7 +447,7 @@ def test_workbook_matches_work_list_rows_and_plain_case_details(tmp_path, demo):
         "could not be confirmed at the building level. Flood data is on hold until the address is corrected.",
         "Street (S4)", "Street name", "91%",
     ]
-    assert sheet["E3"].value == "No AI suggestion"
+    assert sheet["E3"].value == "No fix found"
     assert [sheet[f"E{index}"].value for index in (5, 6, 7)] == [
         "Confirmed by Precisely", "Confirmed incorrect", "Confirmed by Precisely",
     ]

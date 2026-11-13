@@ -46,6 +46,8 @@ from address_intelligence.app_data import (
     sort_sales_worklist,
     worklist_case_status,
     worklist_verification_text,
+    plain_status,
+    STATUS_HELP,
     work_path,
 )
 from address_intelligence.client_profile import DEFAULT_PROFILE_PATH, load_client_profile
@@ -452,7 +454,7 @@ def _render_exception_detail(detail: dict[str, Any]) -> None:
     verification = worklist_verification_text(detail) if verification_available else ""
     status = worklist_case_status(detail, display["Status"])
     status_key = status.casefold()
-    if status_key in {"confirmed incorrect", "rejected", "not verified", "with the customer"}:
+    if status_key in {"confirmed incorrect", "rejected", "not verified", "not confirmed by precisely", "with the customer"}:
         color, background = "#B00062", "#FDE8F3"
     elif status_key == "confirmed by precisely":
         color, background = "#39006B", "#F5EFFC"
@@ -1266,9 +1268,9 @@ with results_tab:
             row["Address on file"] for row in format_sales_worklist_rows(queue)
         )
         action_values = sorted({str(row.get("next_action", "")) for row in queue})
-        verification_values = sorted(
-            {str(row.get("verification_status", "")) for row in queue}
-        )
+        status_order = ["Confirmed by Precisely", "Not confirmed by Precisely", "No fix found", "With the customer", "Not started"]
+        present_statuses = {plain_status(row) for row in queue} - {""}
+        verification_values = [status for status in status_order if status in present_statuses] + sorted(present_statuses - set(status_order))
         action_column, verification_column = st.columns(2)
         with action_column:
             action_filter = st.selectbox(
@@ -1278,16 +1280,16 @@ with results_tab:
             )
         with verification_column:
             verification_filter = st.selectbox(
-                "Filter by verification status",
+                "Filter by status",
                 ["All", *verification_values],
-                format_func=lambda value: "All" if value == "All" else friendly_label(value),
+                help=STATUS_HELP,
             )
         filtered = [
             row for row in queue
             if (action_filter == "All" or row.get("next_action") == action_filter)
             and (
                 verification_filter == "All"
-                or row.get("verification_status") == verification_filter
+                or plain_status(row) == verification_filter
             )
         ]
         formatted_rows = format_sales_worklist_rows(filtered)
@@ -1319,8 +1321,8 @@ with results_tab:
                     "Policy ID": st.column_config.TextColumn("Policy ID", width=100),
                     **({"Address on file": st.column_config.TextColumn("Address on file", width=260)} if has_input_address else {}),
                     "Next action": st.column_config.TextColumn("Next action", width=145),
-                    "Why flagged": st.column_config.TextColumn("Why flagged", width=250),
-                    "Status": st.column_config.TextColumn("Status", width=170),
+                    "Why flagged": st.column_config.TextColumn("Why flagged", width=220),
+                    "Status": st.column_config.TextColumn("Status", width=200, help=STATUS_HELP),
                 },
                 key=table_key,
                 on_select="rerun",
