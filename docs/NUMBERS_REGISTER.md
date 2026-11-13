@@ -123,7 +123,7 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 | B16 | Credits per policy | 9.33 | Geocode 1, flood 5, water 2, year built 1, USCAN 0.33. Enrichment applied to all 300,000 (conservative). Separate ID lookup dropped: PB_KEY came back on the same 39 records | `src/address_intelligence/credits.py`, `breakdown.md` | Measured prices |
 | B17 | Credit value | $0.01 | API list price, illustrative; enterprise subscription quoted in the proposal; risk-use fees excluded | `docs/API_DISCOVERY.md` | Sourced |
 | B18 | Developer cost | $3,700 a week | $135,980 ÷ 0.70 ÷ 52 | Wage: [BLS Occupational Outlook Handbook](https://www.bls.gov/ooh/computer-and-information-technology/software-developers.htm); benefits 30%: [BLS ECEC](https://www.bls.gov/news.release/ecec.nr0.htm) | Sourced |
-| B19 | Integration effort | 20 person-weeks | Batch 3, entry checks 14, work list 3 | Planning estimate | Assumed |
+| B19 | Integration effort | Phase 1: 6 person-weeks; phase 2: 14 | Phase 1: batch clean-up 3, work list 3. Phase 2: entry checks with Address Autocomplete 14 | Planning estimate | Assumed |
 | B20 | Annual maintenance | 10% of integration | Planning estimate | Planning estimate | Assumed |
 
 ## 7. Risk 1: operations cost
@@ -139,7 +139,7 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 
 ## 8. Cost and return
 
-Run-rate savings start at go-live. Flood value and the backlog cleanup are excluded from the headline.
+The business case is phase 1: the batch clean-up, the work list, and a regular re-check of new and changed addresses. Every saving below is earned by phase 1, and every cost behind it is included. Phase 2 (checks at entry with Address Autocomplete) is shown separately: its build is estimated, its subscription is quoted, and its extra savings are not counted. Run-rate savings start at go-live. Flood value and the backlog cleanup are excluded from the headline.
 
 | ID | Claim | Value | Calculation |
 |---|---|---:|---|
@@ -148,13 +148,18 @@ Run-rate savings start at go-live. Flood value and the backlog cleanup are exclu
 | V3 | Claims handling saved | ≈$45,888 a year | C3 × 31/76 |
 | V4 | **Total saved** | **≈$116,244 a year** | V1 + V2 + V3 |
 | V5 | Data, API list price, illustrative | $27,990 to start; ≈$3,303 a year | 300,000 × 9.33 × $0.01; 35,400 × 9.33 × $0.01 |
-| V6 | Integration; maintenance | $74,000; $7,400 a year | 20 × $3,700; 10% |
-| V7 | **Cost to go-live** | **≈$101,990** | Data + integration |
-| V8 | **Running cost** | **≈$10,703 a year** | Data + maintenance |
-| V9 | **Payback** | **≈12 months after go-live** | V7 ÷ ((V4 − V8) ÷ 12) = 11.6 |
-| V10 | **Three-year net** | **≈$214,633** | 3 × (V4 − V8) − V7, years counted from go-live |
-| V11 | **Annual return once running** | **≈11×** | V4 ÷ V8; 7.7× on mail and claims alone |
-| V12 | Payback if data costs 3× list price | ≈19 months | (27,990 × 3 + 74,000) ÷ ((116,244 − (3,303 × 3 + 7,400)) ÷ 12) = 19.2 |
+| V6 | Phase 1 integration; maintenance | $22,200; $2,220 a year | 6 × $3,700; 10% |
+| V7 | **Phase 1 cost to go live** | **≈$50,190** | Data + integration |
+| V8 | **Running cost** | **≈$5,523 a year** | Data + maintenance (3,302.82 + 2,220) |
+| V9 | **Payback** | **≈5 months after go-live** | V7 ÷ ((V4 − V8) ÷ 12) = 5.4 |
+| V10 | **Three-year net** | **≈$281,974** | 3 × (V4 − V8) − V7, years counted from go-live |
+| V11 | **Annual return once running** | **≈21×** | V4 ÷ V8; ≈15× on mail and claims alone. Backup slides only, never a headline |
+| V12 | Payback if data costs 3× list price | ≈12 months | (27,990 × 3 + 22,200) ÷ ((116,244 − (3,302.82 × 3 + 2,220)) ÷ 12) = 12.2 |
+| V13 | Phase 2 build: checks at entry with Address Autocomplete | $51,800; $5,180 a year maintenance | 14 × $3,700; 10% |
+| V14 | Phase 2 subscription: Address Autocomplete | Quoted | No public list price; the developer portal says to contact sales. Quoted on the carrier's intake volumes |
+| V15 | Phase 2 value | Measured in the pilot | The pilot's "new addresses caught at entry" measure; not counted in V4 |
+
+Caveat for Q&A: phase 1 re-checks new addresses after entry, so a new flawed address can receive a mailing before it is caught. The mail saving is slightly optimistic for phase 1 alone.
 
 **Backlog option, shown separately:** clearing the backlog by hand costs ≈$483,553. With Precisely, ≈$193,421 of work remains. That ≈$290,132 difference is value only if the carrier would otherwise do this work.
 
@@ -181,8 +186,8 @@ Conditional and illustrative. It applies only if policies are placed at a ZIP's 
 | P3 | Analyst time | 2–3 analysts, about a day a week, 8 weeks: ≈130–190 hours, ≈1,100–1,650 cases | 7 minutes a case = 17.5 × 40% | Assumed |
 | P4 | Every case in the region | ≈3,450–6,900 cases, ≈400–800 hours | Policies × 15% × 70/76 × 7 minutes | Assumed |
 | P5 | IT time | One contact, about 2 days a week for 13 weeks, ≈26 days | Slice of B19 | Assumed |
-| P6 | Weeks 7–10 shadow check of new and changed addresses | ≈230–450 addresses, ≈$21–$42 | 25,000–50,000 × 11.8% (B14) × 4 ÷ 52; × 9.33 × $0.01. Autocomplete is not in the pilot; it is built first in the rollout, inside B19 | Calculated |
+| P6 | Weeks 7–10 shadow check of new and changed addresses | ≈230–450 addresses, ≈$21–$42 | 25,000–50,000 × 11.8% (B14) × 4 ÷ 52; × 9.33 × $0.01. Autocomplete is not in the pilot; it is phase 2 (V13, V14) | Calculated |
 
 ## 11. Retired figures
 
-Not to be used: "6 in 10 fixed", "3 in 4 resolved", "≈25× return", "≈3 months payback", "≈11 months payback", "≈$125K saved", "≈$242K net", "$0.6–0.8M", "$1.1–1.3M", "$2–7M", "1 in 3 mispriced", "≈9,450 over-charged", "verified to the building" for S5 records, "applied", "one-click approval", "no incorrect change reached a policy record".
+Not to be used: "6 in 10 fixed", "3 in 4 resolved", "≈25× return", "≈3 months payback", "≈11 months payback", "≈$125K saved", "≈$242K net", "$0.6–0.8M", "$1.1–1.3M", "$2–7M", "1 in 3 mispriced", "≈9,450 over-charged", "verified to the building" for S5 records, "applied", "one-click approval", "no incorrect change reached a policy record". Superseded on Nov 13, 2026 by the phase 1 case: "≈$102K to go live", "≈$101,990", "$74,000 integration", "≈$11K a year to run", "≈$10,703", "≈12 months payback", "about a year to pay back", "≈$215K" / "≈$214,633", "≈11×", "7.7×", "≈19 months at 3× list".
