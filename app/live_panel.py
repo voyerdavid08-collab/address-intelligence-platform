@@ -174,7 +174,7 @@ def render_result(
 
     if decision_log is None or result.get("made_up"):
         return
-    first, second = st.columns(2)
+    first, second, _ = st.columns([1, 1, 2.2], gap="small")
     decision = None
     if fix and confirmed:
         if first.button("Approve the fix", key=f"approve_{case_key}", type="primary", icon=":material/check:"):

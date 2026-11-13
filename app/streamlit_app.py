@@ -339,7 +339,7 @@ def _render_decision_box(case: dict[str, Any], log_path: Path | None) -> None:
             "Approving logs the decision for audit and adds the address to the corrections file. "
             "Nothing changes in a policy record here."
         )
-        approve_column, reject_column = st.columns(2)
+        approve_column, reject_column, _ = st.columns([1, 1.3, 2.2], gap="small")
         decision = None
         if approve_column.button("Approve the fix", key=f"wl_approve_{policy_id}", type="primary", icon=":material/check:"):
             decision = "approved"
