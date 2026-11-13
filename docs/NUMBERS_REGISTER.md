@@ -177,10 +177,11 @@ Conditional and illustrative. It applies only if policies are placed at a ZIP's 
 | ID | Claim | Value | Basis | Type |
 |---|---|---:|---|---|
 | P1 | Pilot scope | 25,000–50,000 policies, 13 weeks | Proposed scope, agreed with the carrier | Assumed |
-| P2 | Pilot data cost | ≈$2,300–$4,700 | 25,000–50,000 × 9.33 × $0.01, API list price | Assumed |
+| P2 | Pilot data cost | ≈$2,300–$4,700 | 25,000–50,000 × 9.33 × $0.01, API list price, plus P6; the total rounds the same | Assumed |
 | P3 | Analyst time | 2–3 analysts, about a day a week, 8 weeks: ≈130–190 hours, ≈1,100–1,650 cases | 7 minutes a case = 17.5 × 40% | Assumed |
 | P4 | Every case in the region | ≈3,450–6,900 cases, ≈400–800 hours | Policies × 15% × 70/76 × 7 minutes | Assumed |
 | P5 | IT time | One contact, about 2 days a week for 13 weeks, ≈26 days | Slice of B19 | Assumed |
+| P6 | Weeks 7–10 shadow check of new and changed addresses | ≈230–450 addresses, ≈$21–$42 | 25,000–50,000 × 11.8% (B14) × 4 ÷ 52; × 9.33 × $0.01. Autocomplete is not in the pilot; it is built first in the rollout, inside B19 | Calculated |
 
 ## 11. Retired figures
 
