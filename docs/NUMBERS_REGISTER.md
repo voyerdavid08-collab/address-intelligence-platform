@@ -115,6 +115,9 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 | B4 | Loaded staff cost | $40 per hour | Planning estimate | Planning estimate | Assumed |
 | B5 | Staff cost per flawed address | $11.67 | B3 × B4 | Calculated | Assumed |
 | B6 | Staff time avoided | 60% | 410–575 of 1,050–1,400 minutes remain on the 70 records needing work | `reports/`, `breakdown.md` | Assumed, from measured counts |
+
+**B6 derivation (written Nov 15, 2026; counts measured, minutes assumed).** Of the 70 flawed records needing work, after processing: 31 fixed automatically (0 min); 6 AI fixes confirmed by Precisely, analyst approves (≈4–5 min each, ≈25–30); 10 research cases (15–20 min each, 150–200); 1 located on the wrong building (15–20); 14 customer contacts (contact and correct, no research, 10–15 min each, 140–210); 8 right building with the unit missing, customer supplies it (10–15 min each, 80–120). Remaining ≈410–580 of 1,050–1,400 minutes by hand (70 × 15–20), so ≈59–61% avoided; 60% used. Contact time follows the investigate ≈5 / contact ≈5–10 / correct ≈5 split.
+
 | B7 | Mailings per policy per year | 4 | Renewal, billing, notices | Planning estimate | Assumed |
 | B8 | Undeliverable mail rate | 4.3% | Share of USPS volume, FY2014 (6.6 billion pieces); also 4.3% in FY2013 | [USPS OIG MS-MA-15-006](https://www.oversight.gov/sites/default/files/oig-reports/MS-MA-15-006.pdf) | Sourced |
 | B9 | Cost per undeliverable piece | $2 | Within a $1–3 trade-press estimate from unnamed industry experts | [Mailing Systems Technology](https://mailingsystemstechnology.com/print-article-4191-permanent.html) | Assumed |
