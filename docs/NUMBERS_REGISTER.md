@@ -173,8 +173,8 @@ Conditional and illustrative. It applies only if policies are placed at a ZIP's 
 
 | ID | Claim | Value | Calculation | Type |
 |---|---|---:|---|---|
-| D1 | Per 1,000 flood-covered policies, sitting in a lower tier than their real location | ≈150 | 6 / 39; range 70–300 | Measured rate, flood-exposed sample |
-| D2 | Per 1,000, sitting in a higher tier | ≈230 | 9 / 39; range 130–380 | Measured rate, flood-exposed sample |
+| D1 | Per 1,000 flood-covered policies, sitting in a lower tier than their real location | ≈150 | 6 / 39; range 70–300 (Wilson 95% interval) | Measured rate, flood-exposed sample |
+| D2 | Per 1,000, sitting in a higher tier | ≈230 | 9 / 39; range 130–380 (Wilson 95% interval) | Measured rate, flood-exposed sample |
 | D3 | Example premium gap between tiers | $1,000 a year | Carrier replaces it | Illustrative |
 | D4 | Example uncollected premium per 1,000 policies | $150,000 a year | D1 × D3 | Illustrative |
 | D5 | Private share of flood policies | Commercial 23% → 48%; residential 6% → 11%, 2018 to 2025 | By policy count | Sourced: [GAO-27-108012](https://www.gao.gov/products/gao-27-108012) |
