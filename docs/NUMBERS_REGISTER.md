@@ -58,6 +58,10 @@ Real business and public-building addresses, no private homes. This is a capabil
 | A5 | Suite supplied when the firm name is known | 1 of 1 | Precisely HQ | `data/output/av_check/` | Measured |
 | A6 | USCAN price | 0.33 credit per address | Portal drop matched the ledger | Portal, Nov 5, 2026 | Measured |
 | A7 | USCAN across the book, list price | ≈$990 | 300,000 × 0.33 × $0.01 | Calculated | Assumed |
+| AV1 | Address Verification on the 39 exact-address sample records: confirmed deliverable | 20 of 39 | Postal delivery code Y. USCAN product, addresses as on file, run Nov 14, 2026 | `data/output/av_check_39/` | Measured |
+| AV2 | Same run: apartment or suite problem | 7 of 39 | 4 invalid unit (code S), 3 missing unit (code D) | same | Measured |
+| AV3 | Same run: not confirmed for delivery | 12 of 39 | Code N, "Address Not Deliverable" (primary number not valid). Not a rate: the sample's house numbers are generated, which likely makes this more frequent | same | Measured |
+| AV4 | Same run: flagged vacant by postal data | 3 of 39 | Vacant flag Y. Use as a capability, not a count | same | Measured |
 
 ## 4. Flood finding
 
