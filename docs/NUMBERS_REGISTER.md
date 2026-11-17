@@ -114,7 +114,7 @@ Precisely confirms that a suggested address exists, not that it is the policyhol
 | B3 | Staff time per flawed address | 17.5 min | Midpoint of 15–20 | Planning estimate | Assumed |
 | B4 | Loaded staff cost | $40 per hour | Planning estimate | Planning estimate | Assumed |
 | B5 | Staff cost per flawed address | $11.67 | B3 × B4 | Calculated | Assumed |
-| B6 | Staff time avoided | 60% | 410–575 of 1,050–1,400 minutes remain on the 70 records needing work | `reports/`, `breakdown.md` | Assumed, from measured counts |
+| B6 | Staff time avoided | 60% | 410–580 of 1,050–1,400 minutes remain on the 70 records needing work | `reports/`, `breakdown.md` | Assumed, from measured counts |
 
 **B6 derivation (written Nov 15, 2026; counts measured, minutes assumed).** Of the 70 flawed records needing work, after processing: 31 fixed automatically (0 min); 6 AI fixes confirmed by Precisely, analyst approves (≈4–5 min each, ≈25–30); 10 research cases (15–20 min each, 150–200); 1 located on the wrong building (15–20); 14 customer contacts (contact and correct, no research, 10–15 min each, 140–210); 8 right building with the unit missing, customer supplies it (10–15 min each, 80–120). Remaining ≈410–580 of 1,050–1,400 minutes by hand (70 × 15–20), so ≈59–61% avoided; 60% used. Contact time follows the investigate ≈5 / contact ≈5–10 / correct ≈5 split.
 
@@ -163,7 +163,7 @@ The business case is phase 1: the batch clean-up, the work list, and a regular r
 | V11 | **Annual return once running** | **≈21×** | V4 ÷ V8; ≈15× on mail and claims alone. Backup slides only, never a headline |
 | V12 | Payback if data costs 3× list price | ≈12 months | (27,990 × 3 + 22,200) ÷ ((116,244 − (3,302.82 × 3 + 2,220)) ÷ 12) = 12.2 |
 | V13 | Phase 2 build: checks at entry with Address Autocomplete | $51,800; $5,180 a year maintenance | 14 × $3,700; 10% |
-| V14 | Phase 2 subscription: Address Autocomplete | Quoted | No public list price; the developer portal says to contact sales. Quoted on the carrier's intake volumes |
+| V14 | Phase 2 subscription: Address Autocomplete | Quoted | No credit cost found (checked Nov 16, 2026): the public product page shows none, and the AI Studio usage page lists Autocomplete as a skill with credits used only. The Subscription page says the subscription is managed by the account team, with Contact sales for pricing. Quoted on the carrier's intake volumes |
 | V15 | Phase 2 value | Measured in the pilot | The pilot's "new addresses caught at entry" measure; not counted in V4 |
 
 Caveat for Q&A: phase 1 re-checks new addresses after entry, so a new flawed address can receive a mailing before it is caught. The mail saving is slightly optimistic for phase 1 alone.
